@@ -129,4 +129,7 @@ dmypy.json
 .pyre/
 
 # Local
+.bashrc
 .tern-port
+base_mqtt_pub_sub.py
+Ledger-With-DataFrames.py
