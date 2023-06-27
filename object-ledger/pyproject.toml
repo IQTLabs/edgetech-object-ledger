@@ -1,5 +1,5 @@
 [tool.poetry]
-name = "unit-ledger"
+name = "object-ledger"
 version = "0.1.0"
 description = "Moving object ledger for camera pointing"
 authors = ["ralatsdc <raymond.leclair@springbok.io>"]

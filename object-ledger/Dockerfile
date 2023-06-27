@@ -8,6 +8,6 @@ RUN poetry install --without dev
 
 # TODO: Automate retrieval
 COPY ./axis_ptz_utilities.py .
-COPY ./unit_ledger.py .
+COPY ./object_ledger.py .
 
-ENTRYPOINT ["python3", "unit_ledger.py"]
+ENTRYPOINT ["python3", "object_ledger.py"]

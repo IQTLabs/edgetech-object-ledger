@@ -35,9 +35,9 @@ coloredlogs.install(
 )
 
 
-class UnitLedger(BaseMQTTPubSub):
-    """Manage a ledger of moving objects, or units, such as aircraft
-    or ships, that can be used for pointing a camera at the unit.
+class ObjectLedger(BaseMQTTPubSub):
+    """Manage a ledger of moving objects, such as aircrafts or ships,
+    that can be used for pointing a camera at the object.
     """
 
     def __init__(
@@ -56,16 +56,16 @@ class UnitLedger(BaseMQTTPubSub):
         loop_sleep: float = 0.1,
         **kwargs: Any,
     ):
-        """Instantiate the unit ledger.
+        """Instantiate the object ledger.
 
         Parameters
         ----------
         latitude_l: float
-            Geodetic latitude of the unit ledger device [deg]
+            Geodetic latitude of the object ledger device [deg]
         longitude_l: float
-            Longitude of the unit ledger device [deg]
+            Longitude of the object ledger device [deg]
         altitude_l: float
-            Altitude of the unit ledger device [m]
+            Altitude of the object ledger device [m]
         config_topic: str
             MQTT topic for subscribing to config messages
         ads_b_input_topic: str
@@ -79,7 +79,7 @@ class UnitLedger(BaseMQTTPubSub):
         drop_interval: float
             Interval at which ledger entries are dropped, if old [s]
         select_interval: float
-            Interval at which units are selected for tracking [s]
+            Interval at which objects are selected for tracking [s]
         heartbeat_interval: float
             Interval at which heartbeat message is published [s]
         loop_sleep: float
@@ -87,7 +87,7 @@ class UnitLedger(BaseMQTTPubSub):
 
         Returns
         -------
-        UnitLedger
+        ObjectLedger
         """
         # Parent class handles kwargs, including MQTT IP
         super().__init__(**kwargs)
@@ -104,7 +104,7 @@ class UnitLedger(BaseMQTTPubSub):
         self.heartbeat_interval = heartbeat_interval
         self.loop_sleep = loop_sleep
 
-        # Compute position of the unit ledger device in the geocentric
+        # Compute position of the object ledger device in the geocentric
         # (XYZ) coordinate system
         self.r_XYZ_l = axis_ptz_utilities.compute_r_XYZ(
             self.longitude_l, self.latitude_l, self.altitude_l
@@ -114,12 +114,12 @@ class UnitLedger(BaseMQTTPubSub):
         logging.info("Connecting MQTT client")
         self.connect_client()
         sleep(1)
-        self.publish_registration("Unit Ledger Module Registration")
+        self.publish_registration("Object Ledger Module Registration")
 
         # Initialize ledger
         self.required_columns = [
-            "unit_id",
-            "unit_type",
+            "object_id",
+            "object_type",
             "timestamp",
             "latitude",
             "longitude",
@@ -134,11 +134,11 @@ class UnitLedger(BaseMQTTPubSub):
         self.ledger = pd.DataFrame(
             columns=self.required_columns + self.computed_columns
         )
-        self.ledger.set_index("unit_id", inplace=True)
+        self.ledger.set_index("object_id", inplace=True)
 
         # Log configuration parameters
         logging.info(
-            f"""UnitLedger initialized with parameters:
+            f"""ObjectLedger initialized with parameters:
     latitude_l = {latitude_l}
     longitude_l = {longitude_l}
     altitude_l = {altitude_l}
@@ -199,33 +199,33 @@ class UnitLedger(BaseMQTTPubSub):
         None
         """
         # Assign data attributes allowed to change during operation,
-        # ignoring config message data without a "unit-ledger" key
+        # ignoring config message data without a "object-ledger" key
         if type(msg) == mqtt.MQTTMessage:
             data = self.decode_payload(msg.payload)
         else:
             data = msg["data"]
-        if "unit-ledger" not in data:
+        if "object-ledger" not in data:
             return
         logging.info(f"Processing config message data: {data}")
-        unit_ledger = data["unit-ledger"]
-        self.latitude_l = unit_ledger.get("latitude_l", self.latitude_l)
-        self.longitude_l = unit_ledger.get("longitude_l", self.longitude_l)
-        self.altitude_l = unit_ledger.get("altitude_l", self.altitude_l)
-        self.config_topic = unit_ledger.get("config_topic", self.config_topic)
-        self.ads_b_input_topic = unit_ledger.get(
+        object_ledger = data["object-ledger"]
+        self.latitude_l = object_ledger.get("latitude_l", self.latitude_l)
+        self.longitude_l = object_ledger.get("longitude_l", self.longitude_l)
+        self.altitude_l = object_ledger.get("altitude_l", self.altitude_l)
+        self.config_topic = object_ledger.get("config_topic", self.config_topic)
+        self.ads_b_input_topic = object_ledger.get(
             "ads_b_input_topic", self.ads_b_input_topic
         )
-        self.ais_input_topic = unit_ledger.get("ais_input_topic", self.ais_input_topic)
-        self.controller_topic = unit_ledger.get(
+        self.ais_input_topic = object_ledger.get("ais_input_topic", self.ais_input_topic)
+        self.controller_topic = object_ledger.get(
             "controller_topic", self.controller_topic
         )
-        self.max_age = unit_ledger.get("max_age", self.max_age)
-        self.drop_interval = unit_ledger.get("drop_interval", self.drop_interval)
-        self.select_interval = unit_ledger.get("select_interval", self.select_interval)
-        self.heartbeat_interval = unit_ledger.get(
+        self.max_age = object_ledger.get("max_age", self.max_age)
+        self.drop_interval = object_ledger.get("drop_interval", self.drop_interval)
+        self.select_interval = object_ledger.get("select_interval", self.select_interval)
+        self.heartbeat_interval = object_ledger.get(
             "heartbeat_interval", self.heartbeat_interval
         )
-        self.loop_sleep = unit_ledger.get("loop_sleep", self.loop_sleep)
+        self.loop_sleep = object_ledger.get("loop_sleep", self.loop_sleep)
 
     def _state_callback(
         self,
@@ -258,14 +258,14 @@ class UnitLedger(BaseMQTTPubSub):
             if "ADS-B" in data:
                 logging.info(f"Processing ADS-B state message data: {data}")
                 state = json.loads(data["ADS-B"])
-                state["unit_id"] = state["icao"]
-                state["unit_type"] = "aircraft"
+                state["object_id"] = state["icao"]
+                state["object_type"] = "aircraft"
 
             elif "Decoded AIS" in data:
                 logging.info(f"Processing AIS state message data: {data}")
                 state = json.loads(data["Decoded AIS"])
-                state["unit_id"] = state["mmsi"]
-                state["unit_type"] = "ship"
+                state["object_id"] = state["mmsi"]
+                state["object_type"] = "ship"
                 state["track"] = state["course"]
 
             else:
@@ -282,28 +282,28 @@ class UnitLedger(BaseMQTTPubSub):
             logging.error(f"Could not populate required state: {e}")
 
         # Process required state
-        entry = pd.DataFrame(state, index=[state["unit_id"]])
-        entry.set_index("unit_id", inplace=True)
+        entry = pd.DataFrame(state, index=[state["object_id"]])
+        entry.set_index("object_id", inplace=True)
         if entry.notna().all(axis=1).bool():
             # Compute position in the geocentric (XYZ) coordinate
-            # system of the unit
+            # system of the object
             r_XYZ_u = axis_ptz_utilities.compute_r_XYZ(
                 entry["longitude"].to_list()[0],
                 entry["latitude"].to_list()[0],
                 entry["altitude"].to_list()[0],
             )
 
-            # Compute distance between the unit and the unit ledger
+            # Compute distance between the object and the object ledger
             # device
             entry["distance"] = axis_ptz_utilities.norm(r_XYZ_u - self.r_XYZ_l)
 
             # Add or update the entry in the ledger
             if not entry.index.isin(self.ledger.index):
-                logging.info(f"Adding entry state data for unit id: {entry.index}")
+                logging.info(f"Adding entry state data for object id: {entry.index}")
                 self.ledger = pd.concat([self.ledger, entry], ignore_index=False)
 
             else:
-                logging.info(f"Updating entry state data for unit id: {entry.index}")
+                logging.info(f"Updating entry state data for object id: {entry.index}")
                 self.ledger.update(entry)
 
         else:
@@ -315,31 +315,31 @@ class UnitLedger(BaseMQTTPubSub):
             (datetime.utcnow().timestamp() - self.ledger["timestamp"]) / 60
             > self.max_age
         ].index
-        logging.info(f"Dropping entry for unit ids: {index}")
+        logging.info(f"Dropping entry for object ids: {index}")
         self.ledger.drop(
             index,
             inplace=True,
         )
 
-    def _select_unit(self: Any) -> None:
-        """Select the unit that is closest to the unit ledger device."""
-        self.selected_unit_id = self.ledger["distance"].idxmin()
-        logging.info(f"Selected unit with id: {self.selected_unit_id}")
+    def _select_object(self: Any) -> None:
+        """Select the object that is closest to the object ledger device."""
+        self.selected_object_id = self.ledger["distance"].idxmin()
+        logging.info(f"Selected object with id: {self.selected_object_id}")
 
     def main(self: Any) -> None:
         """Schedule methods, subscribe to required topics, and loop."""
 
         # Schedule module heartbeat
         schedule.every(self.heartbeat_interval).seconds.do(
-            self.publish_heartbeat, payload="Unit Ledger Module Heartbeat"
+            self.publish_heartbeat, payload="Object Ledger Module Heartbeat"
         )
 
         # Schedule dropping of ledger entries after their age exceeds
         # the maximum
         schedule.every(self.drop_interval).seconds.do(self._drop_entries)
 
-        # Schedule selection of a unit in the ledger for tracking
-        schedule.every(self.select_interval).seconds.do(self._select_unit)
+        # Schedule selection of a object in the ledger for tracking
+        schedule.every(self.select_interval).seconds.do(self._select_object)
 
         # Subscribe to required topics
         self.add_subscribe_topic(self.config_topic, self._config_callback)
@@ -364,8 +364,8 @@ class UnitLedger(BaseMQTTPubSub):
                 logging.error(f"Main loop exception: {e}")
 
 
-def make_ledger() -> UnitLedger:
-    return UnitLedger(
+def make_ledger() -> ObjectLedger:
+    return ObjectLedger(
         mqtt_ip=os.getenv("MQTT_IP", "mqtt"),
         latitude_l=os.getenv("LATITUDE_L", 0.0),
         longitude_l=os.getenv("LONGITUDE_L", 0.0),

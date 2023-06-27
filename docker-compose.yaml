@@ -14,10 +14,10 @@ services:
       options:
         max-size: "10M"
         max-file: "10"
-  unit-ledger:
-    image: iqtlabs/edgetech-unit-ledger:latest
+  object-ledger:
+    image: iqtlabs/edgetech-object-ledger:latest
     build:
-      context: ./unit-ledger
+      context: ./object-ledger
       dockerfile: ./Dockerfile
     restart: unless-stopped
     depends_on: 
@@ -28,4 +28,4 @@ services:
         max-size: "10M"
         max-file: "10"
     env_file:
-      - unit-ledger.env
+      - object-ledger.env
