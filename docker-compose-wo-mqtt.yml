@@ -1,0 +1,15 @@
+version: "3"
+services:
+  unit-ledger:
+    image: iqtlabs/edgetech-unit-ledger:latest
+    build:
+      context: ./unit-ledger
+      dockerfile: ./Dockerfile
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10M"
+        max-file: "10"
+    env_file:
+      - unit-ledger-wo-mqtt.env
