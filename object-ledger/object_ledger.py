@@ -359,7 +359,7 @@ class ObjectLedger(BaseMQTTPubSub):
         device for tracking, provided either no object has been
         selected, or the currently selected object has been tracked at
         least as long as the maximum track interval."""
-        if self.ledger.emtpy:
+        if self.ledger.empty:
             return
         object_id = self.ledger["distance"].idxmin()
         object_type = self.ledger.loc[object_id, "object_type"]
