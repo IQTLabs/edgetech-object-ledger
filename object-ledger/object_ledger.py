@@ -290,7 +290,7 @@ class ObjectLedger(BaseMQTTPubSub):
             if "ADS-B" in data:
                 logging.info(f"Processing ADS-B state message data: {data}")
                 state = json.loads(data["ADS-B"])
-                state["object_id"] = state["icao"]
+                state["object_id"] = state["icao_hex"]
                 state["object_type"] = "aircraft"
 
             elif "Decoded AIS" in data:
