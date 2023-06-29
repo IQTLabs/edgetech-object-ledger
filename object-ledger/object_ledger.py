@@ -50,6 +50,8 @@ class ObjectLedger(BaseMQTTPubSub):
         ais_input_topic: str,
         controller_topic: str,
         max_age: float = 10.0,
+        max_aircraft_track_interval: float = 4.0,
+        max_ship_track_interval: float = 1.0,
         drop_interval: float = 10.0,
         select_interval: float = 2.0,
         heartbeat_interval: float = 10.0,
@@ -76,6 +78,12 @@ class ObjectLedger(BaseMQTTPubSub):
             MQTT topic for publishing controller messages
         max_age: float
             Maximum age of ledger entries [minutes]
+        max_aircraft_track_interval: float
+            Maximum interval in which aircraft are selected for
+            tracking [minutes]
+        max_ship_track_interval: float
+            Maximum interval in which ship are selected for tracking
+            [minutes]
         drop_interval: float
             Interval at which ledger entries are dropped, if old [s]
         select_interval: float
@@ -99,6 +107,8 @@ class ObjectLedger(BaseMQTTPubSub):
         self.ais_input_topic = ais_input_topic
         self.controller_topic = controller_topic
         self.max_age = max_age
+        self.max_aircraft_track_interval = max_aircraft_track_interval
+        self.max_ship_track_interval = max_ship_track_interval
         self.drop_interval = drop_interval
         self.select_interval = select_interval
         self.heartbeat_interval = heartbeat_interval
@@ -130,11 +140,17 @@ class ObjectLedger(BaseMQTTPubSub):
         ]
         self.computed_columns = [
             "distance",
+            "selected_timestamp",
         ]
         self.ledger = pd.DataFrame(
             columns=self.required_columns + self.computed_columns
         )
         self.ledger.set_index("object_id", inplace=True)
+        self.selected_object_id = None
+        self.max_track_interval = {
+            "aircraft": self.max_aircraft_track_interval,
+            "ship": self.max_ship_track_interval,
+        }
 
         # Log configuration parameters
         logging.info(
@@ -147,6 +163,8 @@ class ObjectLedger(BaseMQTTPubSub):
     ais_input_topic = {ais_input_topic}
     controller_topic = {controller_topic}
     max_age = {max_age}
+    max_aircraft_track_interval = {max_aircraft_track_interval}
+    max_ship_track_interval = {max_ship_track_interval}
     drop_interval = {drop_interval}
     select_interval = {select_interval}
     heartbeat_interval = {heartbeat_interval}
@@ -215,17 +233,31 @@ class ObjectLedger(BaseMQTTPubSub):
         self.ads_b_input_topic = object_ledger.get(
             "ads_b_input_topic", self.ads_b_input_topic
         )
-        self.ais_input_topic = object_ledger.get("ais_input_topic", self.ais_input_topic)
+        self.ais_input_topic = object_ledger.get(
+            "ais_input_topic", self.ais_input_topic
+        )
         self.controller_topic = object_ledger.get(
             "controller_topic", self.controller_topic
         )
         self.max_age = object_ledger.get("max_age", self.max_age)
+        self.max_aircraft_track_interval = object_ledger.get(
+            "max_aircraft_track_interval", self.max_aircraft_track_interval
+        )
+        self.max_ship_track_interval = object_ledger.get(
+            "max_ship_track_interval", self.max_ship_track_interval
+        )
         self.drop_interval = object_ledger.get("drop_interval", self.drop_interval)
-        self.select_interval = object_ledger.get("select_interval", self.select_interval)
+        self.select_interval = object_ledger.get(
+            "select_interval", self.select_interval
+        )
         self.heartbeat_interval = object_ledger.get(
             "heartbeat_interval", self.heartbeat_interval
         )
         self.loop_sleep = object_ledger.get("loop_sleep", self.loop_sleep)
+        self.max_track_interval = {
+            "aircraft": self.max_aircraft_track_interval,
+            "ship": self.max_ship_track_interval,
+        }
 
     def _state_callback(
         self,
@@ -277,6 +309,7 @@ class ObjectLedger(BaseMQTTPubSub):
 
             # Initialize computed columns
             state["distance"] = 0.0
+            state["selected_timestamp"] = 0.0
 
         except Exception as e:
             logging.error(f"Could not populate required state: {e}")
@@ -322,9 +355,25 @@ class ObjectLedger(BaseMQTTPubSub):
         )
 
     def _select_object(self: Any) -> None:
-        """Select the object that is closest to the object ledger device."""
-        self.selected_object_id = self.ledger["distance"].idxmin()
-        logging.info(f"Selected object with id: {self.selected_object_id}")
+        """Select the object that is closest to the object ledger
+        device for tracking, provided either no object has been
+        selected, or the currently selected object has been tracked at
+        least as long as the maximum track interval."""
+        if self.ledger.empty:
+            return
+        object_id = self.ledger["distance"].idxmin()
+        object_type = self.ledger.loc[object_id, "object_type"]
+        selected_timestamp = self.ledger.loc[object_id, "selected_timestamp"]
+        if (
+            self.selected_object_id is None
+            or datetime.utcnow().timestamp() - selected_timestamp
+            > self.max_track_interval[object_type]
+        ):
+            self.selected_object_id = object_id
+            self.ledger.loc[
+                object_id, "selected_timestamp"
+            ] = datetime.utcnow().timestamp()
+            logging.info(f"Selected object with id: {self.selected_object_id}")
 
     def main(self: Any) -> None:
         """Schedule methods, subscribe to required topics, and loop."""
@@ -367,14 +416,18 @@ class ObjectLedger(BaseMQTTPubSub):
 def make_ledger() -> ObjectLedger:
     return ObjectLedger(
         mqtt_ip=os.getenv("MQTT_IP", "mqtt"),
-        latitude_l=os.getenv("LATITUDE_L", 0.0),
-        longitude_l=os.getenv("LONGITUDE_L", 0.0),
-        altitude_l=os.getenv("ALTITUDE_L", 0.0),
+        latitude_l=float(os.getenv("LATITUDE_L", 0.0)),
+        longitude_l=float(os.getenv("LONGITUDE_L", 0.0)),
+        altitude_l=float(os.getenv("ALTITUDE_L", 0.0)),
         config_topic=os.getenv("CONFIG_TOPIC", "TBC"),
         ads_b_input_topic=os.getenv("ADS_B_INPUT_TOPIC", "TBC"),
         ais_input_topic=os.getenv("AIS_INPUT_TOPIC", "TBC"),
         controller_topic=os.getenv("CONTROLLER_TOPIC", "TBC"),
         max_age=float(os.getenv("MAX_AGE", 10.0)),
+        max_aircraft_track_interval=float(
+            os.getenv("MAX_AIRCRAFT_TRACK_INTERVAL", 4.0)
+        ),
+        max_ship_track_interval=float(os.getenv("MAX_SHIP_TRACK_INTERVAL", 1.0)),
         drop_interval=float(os.getenv("DROP_INTERVAL", 10.0)),
         select_interval=float(os.getenv("SELECT_INTERVAL", 2.0)),
         heartbeat_interval=float(os.getenv("HEARTBEAT_INTERVAL", 10.0)),
