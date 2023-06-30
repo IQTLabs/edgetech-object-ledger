@@ -42,13 +42,15 @@ class ObjectLedger(BaseMQTTPubSub):
 
     def __init__(
         self: Any,
+        hostname: str,
         latitude_l: float,
         longitude_l: float,
         altitude_l: float,
         config_topic: str,
         ads_b_input_topic: str,
         ais_input_topic: str,
-        controller_topic: str,
+        ledger_output_topic: str,
+        selection_output_topic: str,
         max_age: float = 10.0,
         max_aircraft_track_interval: float = 4.0,
         max_ship_track_interval: float = 1.0,
@@ -62,6 +64,7 @@ class ObjectLedger(BaseMQTTPubSub):
 
         Parameters
         ----------
+        hostname (str): Name of host
         latitude_l: float
             Geodetic latitude of the object ledger device [deg]
         longitude_l: float
@@ -74,8 +77,12 @@ class ObjectLedger(BaseMQTTPubSub):
             MQTT topic for subscribing to ADS-B messages
         ais_input_topic: str
             MQTT topic for subscribing to AIS messages
-        controller_topic: str
-            MQTT topic for publishing controller messages
+        ledger_output_topic: str,
+            MQTT topic for publishing a message containing the full
+            ledger
+        selection_output_topic: str,
+            MQTT topic for publishing a message containing the
+            selected object
         max_age: float
             Maximum age of ledger entries [minutes]
         max_aircraft_track_interval: float
@@ -99,13 +106,15 @@ class ObjectLedger(BaseMQTTPubSub):
         """
         # Parent class handles kwargs, including MQTT IP
         super().__init__(**kwargs)
+        self.hostname = hostname
         self.latitude_l = latitude_l
         self.longitude_l = longitude_l
         self.altitude_l = altitude_l
         self.config_topic = config_topic
         self.ads_b_input_topic = ads_b_input_topic
         self.ais_input_topic = ais_input_topic
-        self.controller_topic = controller_topic
+        self.ledger_output_topic = ledger_output_topic
+        self.selection_output_topic = selection_output_topic
         self.max_age = max_age
         self.max_aircraft_track_interval = max_aircraft_track_interval
         self.max_ship_track_interval = max_ship_track_interval
@@ -140,28 +149,30 @@ class ObjectLedger(BaseMQTTPubSub):
         ]
         self.computed_columns = [
             "distance",
-            "selected_timestamp",
+            "timestamp_selected",
         ]
         self.ledger = pd.DataFrame(
             columns=self.required_columns + self.computed_columns
         )
         self.ledger.set_index("object_id", inplace=True)
-        self.selected_object_id = None
+        self.selected_object = None
         self.max_track_interval = {
-            "aircraft": self.max_aircraft_track_interval,
-            "ship": self.max_ship_track_interval,
+            "aircraft": self.max_aircraft_track_interval * 60,
+            "ship": self.max_ship_track_interval * 60,
         }
 
         # Log configuration parameters
         logging.info(
             f"""ObjectLedger initialized with parameters:
+    hostname = {hostname}
     latitude_l = {latitude_l}
     longitude_l = {longitude_l}
     altitude_l = {altitude_l}
     config_topic = {config_topic}
     ads_b_input_topic = {ads_b_input_topic}
     ais_input_topic = {ais_input_topic}
-    controller_topic = {controller_topic}
+    ledger_output_topic = {ledger_output_topic}
+    selection_output_topic = {selection_output_topic}
     max_age = {max_age}
     max_aircraft_track_interval = {max_aircraft_track_interval}
     max_ship_track_interval = {max_ship_track_interval}
@@ -236,8 +247,11 @@ class ObjectLedger(BaseMQTTPubSub):
         self.ais_input_topic = object_ledger.get(
             "ais_input_topic", self.ais_input_topic
         )
-        self.controller_topic = object_ledger.get(
-            "controller_topic", self.controller_topic
+        self.ledger_output_topic = object_ledger.get(
+            "ledger_output_topic", self.ledger_output_topic
+        )
+        self.selection_output_topic = object_ledger.get(
+            "selection_output_topic", self.selection_output_topic
         )
         self.max_age = object_ledger.get("max_age", self.max_age)
         self.max_aircraft_track_interval = object_ledger.get(
@@ -255,8 +269,8 @@ class ObjectLedger(BaseMQTTPubSub):
         )
         self.loop_sleep = object_ledger.get("loop_sleep", self.loop_sleep)
         self.max_track_interval = {
-            "aircraft": self.max_aircraft_track_interval,
-            "ship": self.max_ship_track_interval,
+            "aircraft": self.max_aircraft_track_interval * 60,
+            "ship": self.max_ship_track_interval * 60,
         }
 
     def _state_callback(
@@ -309,7 +323,7 @@ class ObjectLedger(BaseMQTTPubSub):
 
             # Initialize computed columns
             state["distance"] = 0.0
-            state["selected_timestamp"] = 0.0
+            state["timestamp_selected"] = 2 * datetime.utcnow().timestamp()
 
         except Exception as e:
             logging.error(f"Could not populate required state: {e}")
@@ -337,7 +351,17 @@ class ObjectLedger(BaseMQTTPubSub):
 
             else:
                 logging.info(f"Updating entry state data for object id: {entry.index}")
-                self.ledger.update(entry)
+                self.ledger.update(
+                    entry.drop(["distance", "timestamp_selected"], axis=1)
+                )
+
+            # Send the full ledger to MQTT
+            self._send_data(
+                {
+                    "type": "Full Ledger",
+                    "payload": self.ledger.to_json(),
+                }
+            )
 
         else:
             logging.info(f"Invalid entry: {entry}")
@@ -354,38 +378,115 @@ class ObjectLedger(BaseMQTTPubSub):
             inplace=True,
         )
 
+    def get_max_track_interval(self, object_type):
+        return self.max_track_interval[object_type]
+
     def _select_object(self: Any) -> None:
         """Select the object that is closest to the object ledger
         device for tracking, provided either no object has been
         selected, or the currently selected object has been tracked at
-        least as long as the maximum track interval."""
+        least as long as the maximum track interval.
+        """
+        # Keep the ledger sorted by distance
         if self.ledger.empty:
+            logging.info("Ledger is empty: no object to select")
             return
-        object_id = self.ledger["distance"].idxmin()
-        object_type = self.ledger.loc[object_id, "object_type"]
-        selected_timestamp = self.ledger.loc[object_id, "selected_timestamp"]
+        self.ledger.sort_values("distance", inplace=True)
+
+        # Find objects that have not been tracked longer than the
+        # maximum track interval
+        selectable_objects = self.ledger[
+            datetime.utcnow().timestamp() - self.ledger["timestamp_selected"]
+            < self.ledger["object_type"].apply(self.get_max_track_interval)
+        ]
+        if selectable_objects.empty:
+            # Any previously selected object has been tracked longer
+            # than the maximum track interval
+            logging.info("No selectable objects")
+            self.selected_object = None
+            return
+
+        # Select the closest object if no object was previously
+        # selected, or the previously selected object has been tracked
+        # longer than the maximum track interval
         if (
-            self.selected_object_id is None
-            or datetime.utcnow().timestamp() - selected_timestamp
-            > self.max_track_interval[object_type]
+            self.selected_object is None
+            or self.selected_object.name not in selectable_objects.index
         ):
-            self.selected_object_id = object_id
+            timestamp_selected = datetime.utcnow().timestamp()
+            self.selected_object = selectable_objects.iloc[0].copy()
+            self.selected_object["object_id"] = self.selected_object.name
+            self.selected_object.at["timestamp_selected"] = timestamp_selected
             self.ledger.loc[
-                object_id, "selected_timestamp"
-            ] = datetime.utcnow().timestamp()
-            logging.info(f"Selected object with id: {self.selected_object_id}")
+                self.selected_object.name, "timestamp_selected"
+            ] = timestamp_selected
+            logging.info(f"Selected object with id: {self.selected_object.name}")
+
+        # Send the selected object to MQTT
+        self._send_data(
+            {
+                "type": "Selected Object",
+                "payload": self.selected_object.to_json(),
+            }
+        )
+
+    def _send_data(self: Any, data: Dict[str, str]) -> bool:
+        """Leverages edgetech-core functionality to publish a JSON
+        payload to the MQTT broker on the topic specified in the class
+        constructor.
+
+        Args:
+            data (Dict[str, str]): Dictionary payload that maps keys
+                to payload.
+
+        Returns:
+            bool: Returns True if successful publish else False
+        """
+        # TODO: Provide fields via environment or command line
+        out_json = self.generate_payload_json(
+            push_timestamp=str(int(datetime.utcnow().timestamp())),
+            device_type="TBC",
+            id_=self.hostname,
+            deployment_id=f"TBC-{self.hostname}",
+            current_location="TBC",
+            status="Debug",
+            message_type="Event",
+            model_version="null",
+            firmware_version="v0.0.0",
+            data_payload_type=data["type"],
+            data_payload=data["payload"],
+        )
+
+        # Publish the data as JSON to the topic by type
+        if data["type"] == "Full Ledger":
+            send_data_topic = self.ledger_output_topic
+
+        elif data["type"] == "Selected Object":
+            send_data_topic = self.selection_output_topic
+
+        else:
+            logging.info(f"Unexpected data type: {data['type']}")
+
+        success = self.publish_to_topic(send_data_topic, out_json)
+        if success:
+            logging.info(f"Successfully sent data on channel {send_data_topic}: {data}")
+        else:
+            logging.info(f"Failed to send data on channel {send_data_topic}: {data}")
+
+        # Return True if successful else False
+        return success
 
     def main(self: Any) -> None:
         """Schedule methods, subscribe to required topics, and loop."""
 
         # Schedule module heartbeat
-        schedule.every(self.heartbeat_interval).seconds.do(
-            self.publish_heartbeat, payload="Object Ledger Module Heartbeat"
-        )
+        # schedule.every(self.heartbeat_interval).seconds.do(
+        #     self.publish_heartbeat, payload="Object Ledger Module Heartbeat"
+        # )
 
         # Schedule dropping of ledger entries after their age exceeds
         # the maximum
-        schedule.every(self.drop_interval).seconds.do(self._drop_entries)
+        # schedule.every(self.drop_interval).seconds.do(self._drop_entries)
 
         # Schedule selection of a object in the ledger for tracking
         schedule.every(self.select_interval).seconds.do(self._select_object)
@@ -409,20 +510,22 @@ class ObjectLedger(BaseMQTTPubSub):
                 logging.debug(exception)
                 sys.exit()
 
-            except Exception as e:
-                logging.error(f"Main loop exception: {e}")
+            # except Exception as exception:
+            #     logging.error(f"Main loop exception: {exception}")
 
 
 def make_ledger() -> ObjectLedger:
     return ObjectLedger(
         mqtt_ip=os.getenv("MQTT_IP", "mqtt"),
+        hostname=os.environ.get("HOSTNAME", ""),
         latitude_l=float(os.getenv("LATITUDE_L", 0.0)),
         longitude_l=float(os.getenv("LONGITUDE_L", 0.0)),
         altitude_l=float(os.getenv("ALTITUDE_L", 0.0)),
         config_topic=os.getenv("CONFIG_TOPIC", "TBC"),
         ads_b_input_topic=os.getenv("ADS_B_INPUT_TOPIC", "TBC"),
         ais_input_topic=os.getenv("AIS_INPUT_TOPIC", "TBC"),
-        controller_topic=os.getenv("CONTROLLER_TOPIC", "TBC"),
+        ledger_output_topic=os.getenv("LEDGER_OUTPUT_TOPIC", "TBC"),
+        selection_output_topic=os.getenv("SELECTION_OUTPUT_TOPIC", "TBC"),
         max_age=float(os.getenv("MAX_AGE", 10.0)),
         max_aircraft_track_interval=float(
             os.getenv("MAX_AIRCRAFT_TRACK_INTERVAL", 4.0)
