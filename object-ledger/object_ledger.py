@@ -378,7 +378,15 @@ class ObjectLedger(BaseMQTTPubSub):
             inplace=True,
         )
 
-    def get_max_track_interval(self, object_type):
+    def get_max_track_interval(self, object_type: str) -> float:
+        """Get the maximum track interval based on object type.
+
+        Args:
+            object_type (str): the object type: 'aircraft' or 'ship'
+
+        Returns:
+            (float): the maximum track interval [minutes]
+        """
         return self.max_track_interval[object_type]
 
     def _select_object(self: Any) -> None:
