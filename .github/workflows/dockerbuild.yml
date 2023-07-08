@@ -34,8 +34,10 @@ jobs:
         REPO_TOKEN: ${{ secrets.REPO_TOKEN  }}
         REPO_NAME: "edgetech-axis-ptz-controller"
         REPO_BRANCH: "main"
-        REPO_PATH: "axis-ptz-controller/axis_ptz_controller.py"
+        REPO_PATH: "axis-ptz-controller/axis_ptz_utilities.py"
       run: |
+        pwd
+        ls
         REPO_OWNER=$(dirname $GITHUB_REPOSITORY)
         curl \
         -L https://$REPO_TOKEN@raw.githubusercontent.com/$REPO_OWNER/$REPO_NAME/$REPO_BRANCH/$REPO_PATH \
