@@ -59,10 +59,11 @@ jobs:
         REPO_TOKEN: ${{ secrets.REPO_TOKEN }}
         DOCKER_FOLDER: "object-ledger"
         DOCKER_NAMESPACE: ${{ vars.DOCKER_NAMESPACE }}
+        TAG_NAME: ${{ steps.get_tag.outputs.IMAGE_TAG }}
       run: |
         GITHUB_REPO=$(basename $GITHUB_REPOSITORY)
         docker buildx build $DOCKER_FOLDER \
         --platform linux/arm64,linux/amd64 \
         --push \
         --tag $DOCKER_NAMESPACE/$GITHUB_REPO:latest \
-        --tag $DOCKER_NAMESPACE/$GITHUB_REPO:${{ steps.get_tag.outputs.IMAGE_TAG }}
+        --tag $DOCKER_NAMESPACE/$GITHUB_REPO:$TAG_NAME
