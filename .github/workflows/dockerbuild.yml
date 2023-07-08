@@ -57,6 +57,8 @@ jobs:
         DOCKER_FOLDER: "object-ledger"
         DOCKER_NAMESPACE: ${{ vars.DOCKER_NAMESPACE }}
       run: |
+        pwd
+        ls
         GITHUB_REPO=$(basename $GITHUB_REPOSITORY)
         docker buildx build $GITHUB_REPO/$DOCKER_FOLDER --push \
         --tag $DOCKER_NAMESPACE/$GITHUB_REPO:latest \
