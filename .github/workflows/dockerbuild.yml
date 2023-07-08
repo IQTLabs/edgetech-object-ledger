@@ -6,7 +6,8 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v3
+    - name: Checkout repository
+      uses: actions/checkout@v3
 
     - name: Get tag
       id: get_tag
@@ -18,44 +19,46 @@ jobs:
       with:
         platforms: all
 
-    - name: Set up Docker Buildx
+    - name: Set up Docker buildx
       id: buildx
       uses: docker/setup-buildx-action@v2
       with:
         version: latest
 
-    - name: Docker Login
-      run: echo "${{ secrets.DOCKER_TOKEN }}" | docker login --username "${{ secrets.DOCKER_USERNAME }}" --password-stdin
+    - name: Login to Docker Hub
+      run: echo "${{ secrets.DOCKER_TOKEN }}" | docker login --username "${{ vars.DOCKER_USERNAME }}" --password-stdin
 
-    - name: Get Changes
+    - name: Get external dependency
+      env:
+        GITHUB_REPOSITORY: ${{ github.repository }}
+        REPO_TOKEN: ${{ secrets.REPO_TOKEN  }}
+        REPO_NAME: "edgetech-axis-ptz-controller"
+        REPO_BRANCH: "main"
+        REPO_PATH: "axis-ptz-controller/axis_ptz_controller.py"
+      run: |
+        REPO_OWNER=$(dirname $GITHUB_REPOSITORY)
+        REPO_FILE=$(basename $REPO_PATH)
+        curl \
+        -L https://$REPO_TOKEN@raw.githubusercontent.com/$REPO_OWNER/$REPO_NAME/$REPO_BRANCH/$REPO_PATH \
+        -o $REPO_FILE
+
+    - name: Get changes
       id: identify
       uses: jitterbit/get-changed-files@v1
     - run: |
         echo ${{ steps.files.output.all }}
 
-    - name: Build Images
+    - name: Build image
       env: 
-        # Every folder in the repo that has a Dockerfile within it, comma separated 
-        DOCKER_FOLDERS: "object-ledger"
-        DOCKER_NAMESPACE: ${{ secrets.DOCKER_NAMESPACE }}
-        PROJECT_NAME: "edgetech"
+        GITHUB_REPOSITORY: ${{ github.repository }}
+        REPO_TOKEN: ${{ secrets.REPO_TOKEN }}
+        DOCKER_FOLDER: "axis-ptz-controller"
+        DOCKER_NAMESPACE: ${{ vars.DOCKER_NAMESPACE }}
       run: |
-        IFS=","
-        read -ra ARR <<< "$DOCKER_FOLDERS"
-        for folder in "${ARR[@]}"
-        do 
-          IFS="/"
-          read -ra NAMEFOLDER <<< $folder
-          SUBNAME=${NAMEFOLDER[0]}
-          PUBLISHNAME=""
-          if [ $NAMEFOLDER != $SUBNAME ]; then
-            PUBLISHNAME=$PROJECT_NAME-$folder-$SUBNAME
-          else
-            PUBLISHNAME=$PROJECT_NAME-$folder
-          fi
-          echo "Building $folder"
-          docker buildx build "$folder" --push \
-          --tag $DOCKER_NAMESPACE/$PUBLISHNAME:latest \
-          --tag $DOCKER_NAMESPACE/$PUBLISHNAME:${{ steps.get_tag.outputs.IMAGE_TAG }} \
-          --platform linux/arm64,linux/amd64 
-        done
+        GITHUB_REPO=$(basename $GITHUB_REPOSITORY)
+        echo ${DOCKER_NAMESPACE}/$GITHUB_REPO:latest \
+        echo $DOCKER_NAMESPACE/$GITHUB_REPO:${{ steps.get_tag.outputs.IMAGE_TAG }}
+#          docker buildx build "$folder" --push \
+#          --tag $DOCKER_NAMESPACE/$PUBLISHNAME:latest \
+#          --tag $DOCKER_NAMESPACE/$PUBLISHNAME:${{ steps.get_tag.outputs.IMAGE_TAG }} \
+#          --platform linux/arm64,linux/amd64 
