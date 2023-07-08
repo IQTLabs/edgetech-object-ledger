@@ -37,10 +37,9 @@ jobs:
         REPO_PATH: "axis-ptz-controller/axis_ptz_controller.py"
       run: |
         REPO_OWNER=$(dirname $GITHUB_REPOSITORY)
-        REPO_FILE=$(basename $REPO_PATH)
         curl \
         -L https://$REPO_TOKEN@raw.githubusercontent.com/$REPO_OWNER/$REPO_NAME/$REPO_BRANCH/$REPO_PATH \
-        -o $REPO_FILE
+        -o $REPO_PATH
 
     - name: Get changes
       id: identify
@@ -52,11 +51,11 @@ jobs:
       env: 
         GITHUB_REPOSITORY: ${{ github.repository }}
         REPO_TOKEN: ${{ secrets.REPO_TOKEN }}
-        DOCKER_FOLDER: "axis-ptz-controller"
+        DOCKER_PATH: "axis-ptz-controller"
         DOCKER_NAMESPACE: ${{ vars.DOCKER_NAMESPACE }}
       run: |
         GITHUB_REPO=$(basename $GITHUB_REPOSITORY)
-        docker buildx build $DOCKER_FOLDER --push \
+        docker buildx build $GITHUB_REPO/$DOCKER_PATH --push \
         --tag $DOCKER_NAMESPACE/$GITHUB_REPO:latest \
         --tag $DOCKER_NAMESPACE/$GITHUB_REPO:${{ steps.get_tag.outputs.IMAGE_TAG }} \
         --platform linux/arm64,linux/amd64
