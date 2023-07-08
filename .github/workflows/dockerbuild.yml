@@ -56,10 +56,7 @@ jobs:
         DOCKER_NAMESPACE: ${{ vars.DOCKER_NAMESPACE }}
       run: |
         GITHUB_REPO=$(basename $GITHUB_REPOSITORY)
-        echo ${DOCKER_NAMESPACE}/$GITHUB_REPO:latest \
-        echo $DOCKER_NAMESPACE/$GITHUB_REPO:${{ steps.get_tag.outputs.IMAGE_TAG }}
-        docker buildx build $DOCKER_FOLDER \
+        docker buildx build $DOCKER_FOLDER --push \
+        --tag $DOCKER_NAMESPACE/$GITHUB_REPO:latest \
+        --tag $DOCKER_NAMESPACE/$GITHUB_REPO:${{ steps.get_tag.outputs.IMAGE_TAG }} \
         --platform linux/arm64,linux/amd64
-        --push \
-        --tag $DOCKER_NAMESPACE/$PUBLISHNAME:latest \
-        --tag $DOCKER_NAMESPACE/$PUBLISHNAME:${{ steps.get_tag.outputs.IMAGE_TAG }}
