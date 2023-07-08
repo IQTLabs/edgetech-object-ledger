@@ -28,7 +28,7 @@ jobs:
     - name: Login to Docker Hub
       run: echo "${{ secrets.DOCKER_TOKEN }}" | docker login --username "${{ vars.DOCKER_USERNAME }}" --password-stdin
 
-    - name: Get external dependency
+    - name: Get an external dependency
       env:
         GITHUB_REPOSITORY: ${{ github.repository }}
         REPO_TOKEN: ${{ secrets.REPO_TOKEN  }}
