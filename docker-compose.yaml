@@ -1,31 +1,15 @@
 version: "3"
 services:
-  mqtt:
-    image: iqtlabs/edgetech-mqtt:latest
-    ports:
-      - "1883:1883"
-      - "9001:9001"
-    build:
-      context: ./mqtt
-      dockerfile: ./Dockerfile
-    restart: unless-stopped
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10M"
-        max-file: "10"
   object-ledger:
     image: iqtlabs/edgetech-object-ledger:latest
     build:
       context: ./object-ledger
       dockerfile: ./Dockerfile
     restart: unless-stopped
-    depends_on: 
-      - mqtt
     logging:
       driver: "json-file"
       options:
         max-size: "10M"
         max-file: "10"
     env_file:
-      - object-ledger.env
+      - object-ledger-wo-mqtt.env
