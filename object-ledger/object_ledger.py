@@ -452,7 +452,7 @@ class ObjectLedger(BaseMQTTPubSub):
         """
         # TODO: Provide fields via environment or command line
         out_json = self.generate_payload_json(
-            push_timestamp=str(int(datetime.utcnow().timestamp())),
+            push_timestamp=int(datetime.utcnow().timestamp()),
             device_type="TBC",
             id_=self.hostname,
             deployment_id=f"TBC-{self.hostname}",
