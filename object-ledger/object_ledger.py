@@ -488,13 +488,13 @@ class ObjectLedger(BaseMQTTPubSub):
         """Schedule methods, subscribe to required topics, and loop."""
 
         # Schedule module heartbeat
-        # schedule.every(self.heartbeat_interval).seconds.do(
-        #     self.publish_heartbeat, payload="Object Ledger Module Heartbeat"
-        # )
+        schedule.every(self.heartbeat_interval).seconds.do(
+            self.publish_heartbeat, payload="Object Ledger Module Heartbeat"
+        )
 
         # Schedule dropping of ledger entries after their age exceeds
         # the maximum
-        # schedule.every(self.drop_interval).seconds.do(self._drop_entries)
+        schedule.every(self.drop_interval).seconds.do(self._drop_entries)
 
         # Schedule selection of a object in the ledger for tracking
         schedule.every(self.select_interval).seconds.do(self._select_object)
