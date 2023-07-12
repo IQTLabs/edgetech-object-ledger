@@ -5,6 +5,7 @@ on: pull_request
 jobs:
   build:
     runs-on: ubuntu-latest
+    name: Docker Build Check
     steps:
     - name: Checkout repository
       uses: actions/checkout@v3

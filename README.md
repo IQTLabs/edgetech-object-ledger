@@ -30,7 +30,7 @@
     <img src="images/logo.png" alt="Logo" width="331" height="153">
   </a>
 
-<h1 align="center">EdgeTech-Template</h1>
+<h1 align="center">EdgeTech-Object-Ledger</h1>
 
   <p align="center">
   This project manages a ledger of moving objects, such as aircraft or
