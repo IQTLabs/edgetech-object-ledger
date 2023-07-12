@@ -34,7 +34,7 @@
 
   <p align="center">
   This project manages a ledger of moving objects, such as aircraft or
-  ships, that can be used for pointing a camera at the object.
+  ships, that can be used for pointing a camera at the object, among other things.
   <br/>
   <br/>
   In more detail, the object ledger subscribes to MQTT message topics
