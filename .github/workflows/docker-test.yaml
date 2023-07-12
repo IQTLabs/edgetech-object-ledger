@@ -1,6 +1,6 @@
 name: Container Build Testing
 
-on: pull_request
+on: push
 
 jobs:
   build:
