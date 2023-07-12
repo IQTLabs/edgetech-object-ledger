@@ -7,7 +7,7 @@ RUN poetry config virtualenvs.create false
 RUN poetry install --without dev
 
 # TODO: Automate retrieval
-COPY ./axis_ptz_utilities.py .
+ADD https://raw.githubusercontent.com/IQTLabs/edgetech-axis-ptz-controller/main/axis-ptz-controller/axis_ptz_utilities.py .
 COPY ./object_ledger.py .
 
 ENTRYPOINT ["python3", "object_ledger.py"]
