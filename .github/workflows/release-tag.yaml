@@ -17,36 +17,16 @@ jobs:
     - name: Login to Docker Hub
       run: echo "${{ secrets.DOCKER_TOKEN }}" | docker login --username "${{ vars.DOCKER_USERNAME }}" --password-stdin
 
-    - name: Get an external dependency
-      env:
-        # For this repository
-        GITHUB_REPOSITORY: ${{ github.repository }}
-        DOCKER_FOLDER: "object-ledger"
-        REPO_TOKEN: ${{ secrets.REPO_TOKEN  }}
-        # For the external repository
-        REPO_NAME: "edgetech-axis-ptz-controller"
-        REPO_BRANCH: "main"
-        REPO_PATH: "axis-ptz-controller/axis_ptz_utilities.py"
-      run: |
-        # For this repository
-        REPO_OWNER=$(dirname $GITHUB_REPOSITORY)
-        # For the external repository
-        REPO_FILE=$(basename $REPO_PATH)
-        curl \
-        -L https://$REPO_TOKEN@raw.githubusercontent.com/$REPO_OWNER/$REPO_NAME/$REPO_BRANCH/$REPO_PATH \
-        -o $DOCKER_FOLDER/$REPO_FILE
-
     - name: Build image
       env: 
         GITHUB_REPOSITORY: ${{ github.repository }}
-        REPO_TOKEN: ${{ secrets.REPO_TOKEN }}
         DOCKER_FOLDER: "object-ledger"
         DOCKER_NAMESPACE: ${{ vars.DOCKER_NAMESPACE }}
         RELEASE_NAME: ${{ github.event.release.name }}
       run: |
         GITHUB_REPO=$(basename $GITHUB_REPOSITORY)
         docker buildx build $DOCKER_FOLDER \
-        --platform linux/arm64,linux/amd64 \
+        --platform linux/arm64,linux/amd64,linux/arm/v7 \
         --push \
         --tag $DOCKER_NAMESPACE/$GITHUB_REPO:latest \
         --tag $DOCKER_NAMESPACE/$GITHUB_REPO:$RELEASE_NAME
