@@ -3,6 +3,7 @@ import json
 import logging
 import os
 from time import sleep
+import traceback
 from typing import Any, Dict, Union
 import sys
 
@@ -58,6 +59,7 @@ class ObjectLedger(BaseMQTTPubSub):
         select_interval: float = 2.0,
         heartbeat_interval: float = 10.0,
         loop_sleep: float = 0.1,
+        continue_on_exception: bool = False,
         **kwargs: Any,
     ):
         """Instantiate the object ledger.
@@ -99,6 +101,9 @@ class ObjectLedger(BaseMQTTPubSub):
             Interval at which heartbeat message is published [s]
         loop_sleep: float
             Interval to sleep at end of main loop [s]
+        continue_on_exception: bool
+            Continue on unhandled exceptions if True, raise exception
+            if False (the default)
 
         Returns
         -------
@@ -122,6 +127,7 @@ class ObjectLedger(BaseMQTTPubSub):
         self.select_interval = select_interval
         self.heartbeat_interval = heartbeat_interval
         self.loop_sleep = loop_sleep
+        self.continue_on_exception = continue_on_exception
 
         # Compute position of the object ledger device in the geocentric
         # (XYZ) coordinate system
@@ -180,6 +186,7 @@ class ObjectLedger(BaseMQTTPubSub):
     select_interval = {select_interval}
     heartbeat_interval = {heartbeat_interval}
     loop_sleep = {loop_sleep}
+    continue_on_exception = {continue_on_exception}
             """
         )
 
@@ -300,33 +307,29 @@ class ObjectLedger(BaseMQTTPubSub):
             data = self.decode_payload(msg.payload)
         else:
             data = msg["data"]
-        try:
-            if "ADS-B" in data:
-                logging.info(f"Processing ADS-B state message data: {data}")
-                state = json.loads(data["ADS-B"])
-                state["object_id"] = state["icao_hex"]
-                state["object_type"] = "aircraft"
+        if "ADS-B" in data:
+            logging.info(f"Processing ADS-B state message data: {data}")
+            state = json.loads(data["ADS-B"])
+            state["object_id"] = state["icao_hex"]
+            state["object_type"] = "aircraft"
 
-            elif "Decoded AIS" in data:
-                logging.info(f"Processing AIS state message data: {data}")
-                state = json.loads(data["Decoded AIS"])
-                state["object_id"] = state["mmsi"]
-                state["object_type"] = "ship"
-                state["track"] = state["course"]
+        elif "Decoded AIS" in data:
+            logging.info(f"Processing AIS state message data: {data}")
+            state = json.loads(data["Decoded AIS"])
+            state["object_id"] = state["mmsi"]
+            state["object_type"] = "ship"
+            state["track"] = state["course"]
 
-            else:
-                logging.info(f"Skipping state message data: {data}")
-                return
+        else:
+            logging.info(f"Skipping state message data: {data}")
+            return
 
-            # Pop keys that are not required columns
-            [state.pop(key) for key in set(state.keys()) - set(self.required_columns)]
+        # Pop keys that are not required columns
+        [state.pop(key) for key in set(state.keys()) - set(self.required_columns)]
 
-            # Initialize computed columns
-            state["distance"] = 0.0
-            state["timestamp_selected"] = 2 * datetime.utcnow().timestamp()
-
-        except Exception as e:
-            logging.error(f"Could not populate required state: {e}")
+        # Initialize computed columns
+        state["distance"] = 0.0
+        state["timestamp_selected"] = 2 * datetime.utcnow().timestamp()
 
         # Process required state
         entry = pd.DataFrame(state, index=[state["object_id"]])
@@ -518,8 +521,12 @@ class ObjectLedger(BaseMQTTPubSub):
                 logging.debug(exception)
                 sys.exit()
 
-            # except Exception as exception:
-            #     logging.error(f"Main loop exception: {exception}")
+            except Exception as exception:
+                # Optionally continue on exception
+                if self.continue_on_exception:
+                    traceback.print_exc()
+                else:
+                    raise
 
 
 def make_ledger() -> ObjectLedger:
@@ -543,6 +550,9 @@ def make_ledger() -> ObjectLedger:
         select_interval=float(os.getenv("SELECT_INTERVAL", 2.0)),
         heartbeat_interval=float(os.getenv("HEARTBEAT_INTERVAL", 10.0)),
         loop_sleep=float(os.getenv("LOOP_SLEEP", 0.1)),
+        continue_on_exception=ast.literal_eval(
+            os.environ.get("CONTINUE_ON_EXCEPTION", "False")
+        ),
     )
     ledger.main()
 
