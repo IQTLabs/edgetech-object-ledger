@@ -1,3 +1,7 @@
+"""Defines the ObjectLedger child class of BaseMQTTPubSub, and a
+method for making ObjectLedger instances. Instatiates an ObjectLedger,
+and executes its main() method when run as a module.
+"""
 import ast
 from datetime import datetime
 import json
@@ -169,27 +173,7 @@ class ObjectLedger(BaseMQTTPubSub):
         }
 
         # Log configuration parameters
-        logging.info(
-            f"""ObjectLedger initialized with parameters:
-    hostname = {hostname}
-    latitude_l = {latitude_l}
-    longitude_l = {longitude_l}
-    altitude_l = {altitude_l}
-    config_topic = {config_topic}
-    ads_b_input_topic = {ads_b_input_topic}
-    ais_input_topic = {ais_input_topic}
-    ledger_output_topic = {ledger_output_topic}
-    selection_output_topic = {selection_output_topic}
-    max_age = {max_age}
-    max_aircraft_track_interval = {max_aircraft_track_interval}
-    max_ship_track_interval = {max_ship_track_interval}
-    drop_interval = {drop_interval}
-    select_interval = {select_interval}
-    heartbeat_interval = {heartbeat_interval}
-    loop_sleep = {loop_sleep}
-    continue_on_exception = {continue_on_exception}
-            """
-        )
+        self._log_config()
 
     def decode_payload(self, payload: mqtt.MQTTMessage) -> Dict[Any, Any]:
         """
@@ -244,42 +228,69 @@ class ObjectLedger(BaseMQTTPubSub):
         if "object-ledger" not in data:
             return
         logging.info(f"Processing config message data: {data}")
-        object_ledger = data["object-ledger"]
-        self.latitude_l = object_ledger.get("latitude_l", self.latitude_l)
-        self.longitude_l = object_ledger.get("longitude_l", self.longitude_l)
-        self.altitude_l = object_ledger.get("altitude_l", self.altitude_l)
-        self.config_topic = object_ledger.get("config_topic", self.config_topic)
-        self.ads_b_input_topic = object_ledger.get(
+        config = data["object-ledger"]
+        self.hostname = config.get("hostname", self.hostname)
+        self.latitude_l = config.get("latitude_l", self.latitude_l)
+        self.longitude_l = config.get("longitude_l", self.longitude_l)
+        self.altitude_l = config.get("altitude_l", self.altitude_l)
+        self.config_topic = config.get("config_topic", self.config_topic)
+        self.ads_b_input_topic = config.get(
             "ads_b_input_topic", self.ads_b_input_topic
         )
-        self.ais_input_topic = object_ledger.get(
+        self.ais_input_topic = config.get(
             "ais_input_topic", self.ais_input_topic
         )
-        self.ledger_output_topic = object_ledger.get(
+        self.ledger_output_topic = config.get(
             "ledger_output_topic", self.ledger_output_topic
         )
-        self.selection_output_topic = object_ledger.get(
+        self.selection_output_topic = config.get(
             "selection_output_topic", self.selection_output_topic
         )
-        self.max_age = object_ledger.get("max_age", self.max_age)
-        self.max_aircraft_track_interval = object_ledger.get(
+        self.max_age = config.get("max_age", self.max_age)
+        self.max_aircraft_track_interval = config.get(
             "max_aircraft_track_interval", self.max_aircraft_track_interval
         )
-        self.max_ship_track_interval = object_ledger.get(
+        self.max_ship_track_interval = config.get(
             "max_ship_track_interval", self.max_ship_track_interval
         )
-        self.drop_interval = object_ledger.get("drop_interval", self.drop_interval)
-        self.select_interval = object_ledger.get(
+        self.drop_interval = config.get("drop_interval", self.drop_interval)
+        self.select_interval = config.get(
             "select_interval", self.select_interval
         )
-        self.heartbeat_interval = object_ledger.get(
+        self.heartbeat_interval = config.get(
             "heartbeat_interval", self.heartbeat_interval
         )
-        self.loop_sleep = object_ledger.get("loop_sleep", self.loop_sleep)
-        self.max_track_interval = {
-            "aircraft": self.max_aircraft_track_interval * 60,
-            "ship": self.max_ship_track_interval * 60,
+        self.loop_sleep = config.get("loop_sleep", self.loop_sleep)
+        self.continue_on_exception = config.get(
+            "continue_on_exception", self.continue_on_exception
+        )
+
+        # Log configuration parameters
+        self._log_config()
+
+    def _log_config(self: Any) -> None:
+        """Logs all paramters that can be set on construction."""
+        config = {
+            "hostname": self.hostname,
+            "latitude_l": self.latitude_l,
+            "longitude_l": self.longitude_l,
+            "altitude_l": self.altitude_l,
+            "config_topic": self.config_topic,
+            "ads_b_input_topic": self.ads_b_input_topic,
+            "ais_input_topic": self.ais_input_topic,
+            "ledger_output_topic": self.ledger_output_topic,
+            "selection_output_topic": self.selection_output_topic,
+            "max_age": self.max_age,
+            "max_aircraft_track_interval": self.max_aircraft_track_interval,
+            "max_ship_track_interval": self.max_ship_track_interval,
+            "drop_interval": self.drop_interval,
+            "select_interval": self.select_interval,
+            "heartbeat_interval": self.heartbeat_interval,
+            "loop_sleep": self.loop_sleep,
+            "continue_on_exception": self.continue_on_exception,
         }
+        logging.info(f"ObjectLedger configuration:\n{json.dumps(config, indent=4)}")
+
 
     def _state_callback(
         self,
@@ -531,6 +542,7 @@ class ObjectLedger(BaseMQTTPubSub):
 
 
 def make_ledger() -> ObjectLedger:
+    """Instantiates ObjectLedger."""
     return ObjectLedger(
         mqtt_ip=os.getenv("MQTT_IP", "mqtt"),
         hostname=os.environ.get("HOSTNAME", ""),
@@ -555,10 +567,9 @@ def make_ledger() -> ObjectLedger:
             os.environ.get("CONTINUE_ON_EXCEPTION", "False")
         ),
     )
-    ledger.main()
 
 
 if __name__ == "__main__":
-    # Instantiate ledger and execute
+    # Instantiate ObjectLedger and execute
     ledger = make_ledger()
     ledger.main()
