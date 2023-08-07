@@ -234,26 +234,19 @@ class ObjectLedger(BaseMQTTPubSub):
         self._log_config()
 
     def _log_config(self: Any) -> None:
-        """Logs all paramters that can be set on construction."""
+        """Logs all parameters that can be set on construction."""
         config = {
             "hostname": self.hostname,
-            "latitude_l": self.latitude_l,
-            "longitude_l": self.longitude_l,
-            "altitude_l": self.altitude_l,
             "config_topic": self.config_topic,
             "ads_b_input_topic": self.ads_b_input_topic,
             "ais_input_topic": self.ais_input_topic,
             "ledger_output_topic": self.ledger_output_topic,
-            "selection_output_topic": self.selection_output_topic,
-            "max_age": self.max_age,
-            "max_aircraft_track_interval": self.max_aircraft_track_interval,
-            "max_ship_track_interval": self.max_ship_track_interval,
-            "drop_interval": self.drop_interval,
-            "select_interval": self.select_interval,
+            "max_aircraft_entry_age": self.max_aircraft_entry_age,
+            "max_ship_entry_age": self.max_ship_entry_age,
+            "publish_interval": self.publish_interval,
             "heartbeat_interval": self.heartbeat_interval,
             "loop_sleep": self.loop_sleep,
             "continue_on_exception": self.continue_on_exception,
->>>>>>> rl/improve-config-handling
         }
         logging.info(f"ObjectLedger configuration:\n{json.dumps(config, indent=4)}")
 
