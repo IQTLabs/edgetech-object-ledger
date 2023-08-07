@@ -1,3 +1,7 @@
+"""Defines the ObjectLedger child class of BaseMQTTPubSub, and a
+method for making ObjectLedger instances. Instatiates an ObjectLedger,
+and executes its main() method when run as a module.
+"""
 import ast
 from datetime import datetime
 import json
@@ -27,7 +31,7 @@ STYLES = {
     "warning": {"color": "yellow"},
 }
 coloredlogs.install(
-    level=logging.INFO,
+    level=os.environ.get("LOG_LEVEL", "INFO"),
     fmt="%(asctime)s.%(msecs)03d \033[0;90m%(levelname)-8s "
     ""
     "\033[0;36m%(filename)-18s%(lineno)3d\033[00m "
@@ -129,21 +133,7 @@ class ObjectLedger(BaseMQTTPubSub):
         self.ledger.set_index("object_id", inplace=True)
 
         # Log configuration parameters
-        logging.info(
-            f"""ObjectLedger initialized with parameters:
-    hostname = {hostname}
-    config_topic = {config_topic}
-    ads_b_input_topic = {ads_b_input_topic}
-    ais_input_topic = {ais_input_topic}
-    ledger_output_topic = {ledger_output_topic}
-    max_aircraft_entry_age = {max_aircraft_entry_age}
-    max_ship_entry_age = {max_ship_entry_age}
-    publish_interval = {publish_interval}
-    heartbeat_interval = {heartbeat_interval}
-    loop_sleep = {loop_sleep}
-    continue_on_exception = {continue_on_exception}
-            """
-        )
+        self._log_config()
 
     def decode_payload(self, msg: Union[mqtt.MQTTMessage, str]) -> Dict[Any, Any]:
         """
@@ -193,15 +183,16 @@ class ObjectLedger(BaseMQTTPubSub):
         if "object-ledger" not in data:
             return
         logging.info(f"Processing config message data: {data}")
-        object_ledger = data["object-ledger"]
-        self.config_topic = object_ledger.get("config_topic", self.config_topic)
-        self.ads_b_input_topic = object_ledger.get(
+        config = data["object-ledger"]
+        self.hostname = config.get("hostname", self.hostname)
+        self.config_topic = config.get("config_topic", self.config_topic)
+        self.ads_b_input_topic = config.get(
             "ads_b_input_topic", self.ads_b_input_topic
         )
-        self.ais_input_topic = object_ledger.get(
+        self.ais_input_topic = config.get(
             "ais_input_topic", self.ais_input_topic
         )
-        self.ledger_output_topic = object_ledger.get(
+        self.ledger_output_topic = config.get(
             "ledger_output_topic", self.ledger_output_topic
         )
         self.max_aircraft_entry_age = object_ledger.get(
@@ -213,10 +204,13 @@ class ObjectLedger(BaseMQTTPubSub):
         self.publish_interval = object_ledger.get(
             "publish_interval", self.publish_interval
         )
-        self.heartbeat_interval = object_ledger.get(
+        self.heartbeat_interval = config.get(
             "heartbeat_interval", self.heartbeat_interval
         )
         self.loop_sleep = object_ledger.get("loop_sleep", self.loop_sleep)
+        self.continue_on_exception = config.get(
+            "continue_on_exception", self.continue_on_exception
+        )
 
         # Update max entry age dictionary
         self._set_max_entry_age()
@@ -235,7 +229,34 @@ class ObjectLedger(BaseMQTTPubSub):
         self.max_entry_age = {
             "aircraft": self.max_aircraft_entry_age,
             "ship": self.max_ship_entry_age,
+
+        # Log configuration parameters
+        self._log_config()
+
+    def _log_config(self: Any) -> None:
+        """Logs all paramters that can be set on construction."""
+        config = {
+            "hostname": self.hostname,
+            "latitude_l": self.latitude_l,
+            "longitude_l": self.longitude_l,
+            "altitude_l": self.altitude_l,
+            "config_topic": self.config_topic,
+            "ads_b_input_topic": self.ads_b_input_topic,
+            "ais_input_topic": self.ais_input_topic,
+            "ledger_output_topic": self.ledger_output_topic,
+            "selection_output_topic": self.selection_output_topic,
+            "max_age": self.max_age,
+            "max_aircraft_track_interval": self.max_aircraft_track_interval,
+            "max_ship_track_interval": self.max_ship_track_interval,
+            "drop_interval": self.drop_interval,
+            "select_interval": self.select_interval,
+            "heartbeat_interval": self.heartbeat_interval,
+            "loop_sleep": self.loop_sleep,
+            "continue_on_exception": self.continue_on_exception,
+>>>>>>> rl/improve-config-handling
         }
+        logging.info(f"ObjectLedger configuration:\n{json.dumps(config, indent=4)}")
+
 
     def _get_max_entry_age(self, object_type: str) -> float:
         """Gets the maximum entry age based on object type.
@@ -424,7 +445,7 @@ class ObjectLedger(BaseMQTTPubSub):
                 logging.warning("Exiting")
                 sys.exit()
 
-            except Exception as e:
+            except Exception as exception:
                 # Optionally continue on exception
                 if self.continue_on_exception:
                     traceback.print_exc()
@@ -460,10 +481,9 @@ def make_ledger() -> ObjectLedger:
             os.environ.get("CONTINUE_ON_EXCEPTION", "False")
         ),
     )
-    ledger.main()
 
 
 if __name__ == "__main__":
-    # Instantiate ledger and execute
+    # Instantiate ObjectLedger and execute
     ledger = make_ledger()
     ledger.main()
