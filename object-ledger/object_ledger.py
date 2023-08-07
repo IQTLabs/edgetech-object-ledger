@@ -232,6 +232,7 @@ class ObjectLedger(BaseMQTTPubSub):
         self.max_entry_age = {
             "aircraft": self.max_aircraft_entry_age,
             "ship": self.max_ship_entry_age,
+        }
 
     def _log_config(self: Any) -> None:
         """Logs all parameters that can be set on construction."""
