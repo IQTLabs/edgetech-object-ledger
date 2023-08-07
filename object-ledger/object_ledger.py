@@ -114,9 +114,6 @@ class ObjectLedger(BaseMQTTPubSub):
         sleep(1)
         self.publish_registration("Object Ledger Module Registration")
 
-        # Update max entry age dictionary
-        self._set_max_entry_age()
-
         # Initialize ledger
         self.required_columns = [
             "object_id",
@@ -131,6 +128,9 @@ class ObjectLedger(BaseMQTTPubSub):
         ]
         self.ledger = pd.DataFrame(columns=self.required_columns)
         self.ledger.set_index("object_id", inplace=True)
+
+        # Update max entry age dictionary
+        self._set_max_entry_age()
 
         # Log configuration parameters
         self._log_config()
@@ -215,6 +215,9 @@ class ObjectLedger(BaseMQTTPubSub):
         # Update max entry age dictionary
         self._set_max_entry_age()
 
+        # Log configuration parameters
+        self._log_config()
+
     def _set_max_entry_age(self) -> None:
         """Populates maximum entry age dictionary.
 
@@ -229,9 +232,6 @@ class ObjectLedger(BaseMQTTPubSub):
         self.max_entry_age = {
             "aircraft": self.max_aircraft_entry_age,
             "ship": self.max_ship_entry_age,
-
-        # Log configuration parameters
-        self._log_config()
 
     def _log_config(self: Any) -> None:
         """Logs all parameters that can be set on construction."""
