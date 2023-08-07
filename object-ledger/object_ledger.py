@@ -179,35 +179,29 @@ class ObjectLedger(BaseMQTTPubSub):
         """
         # Assign data attributes allowed to change during operation,
         # ignoring config message data without a "object-ledger" key
-        data = self.decode_payload(msg)["Configuration"]
+        data = json.loads(self.decode_payload(msg)["Configuration"])
         if "object-ledger" not in data:
             return
         logging.info(f"Processing config message data: {data}")
         config = data["object-ledger"]
         self.hostname = config.get("hostname", self.hostname)
         self.config_topic = config.get("config_topic", self.config_topic)
-        self.ads_b_input_topic = config.get(
-            "ads_b_input_topic", self.ads_b_input_topic
-        )
-        self.ais_input_topic = config.get(
-            "ais_input_topic", self.ais_input_topic
-        )
+        self.ads_b_input_topic = config.get("ads_b_input_topic", self.ads_b_input_topic)
+        self.ais_input_topic = config.get("ais_input_topic", self.ais_input_topic)
         self.ledger_output_topic = config.get(
             "ledger_output_topic", self.ledger_output_topic
         )
-        self.max_aircraft_entry_age = object_ledger.get(
+        self.max_aircraft_entry_age = config.get(
             "max_aircraft_entry_age", self.max_aircraft_entry_age
         )
-        self.max_ship_entry_age = object_ledger.get(
+        self.max_ship_entry_age = config.get(
             "max_ship_entry_age", self.max_ship_entry_age
         )
-        self.publish_interval = object_ledger.get(
-            "publish_interval", self.publish_interval
-        )
+        self.publish_interval = config.get("publish_interval", self.publish_interval)
         self.heartbeat_interval = config.get(
             "heartbeat_interval", self.heartbeat_interval
         )
-        self.loop_sleep = object_ledger.get("loop_sleep", self.loop_sleep)
+        self.loop_sleep = config.get("loop_sleep", self.loop_sleep)
         self.continue_on_exception = config.get(
             "continue_on_exception", self.continue_on_exception
         )
@@ -250,7 +244,6 @@ class ObjectLedger(BaseMQTTPubSub):
             "continue_on_exception": self.continue_on_exception,
         }
         logging.info(f"ObjectLedger configuration:\n{json.dumps(config, indent=4)}")
-
 
     def _get_max_entry_age(self, object_type: str) -> float:
         """Gets the maximum entry age based on object type.
