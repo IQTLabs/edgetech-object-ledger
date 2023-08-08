@@ -337,7 +337,7 @@ class ObjectLedger(BaseMQTTPubSub):
         index = self.ledger[
             datetime.utcnow().timestamp() - self.ledger["timestamp"]
             > self.ledger["object_type"].apply(self._get_max_entry_age)
-        ]
+        ].index
         if not index.empty:
             logging.info(f"Dropping entry for object ids: {index}")
             self.ledger.drop(
