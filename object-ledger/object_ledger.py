@@ -48,7 +48,7 @@ class ObjectLedger(BaseMQTTPubSub):
     def __init__(
         self,
         hostname: str,
-        config_topic: str,
+        config_json_topic: str,
         ads_b_json_topic: str,
         ais_json_topic: str,
         ledger_output_topic: str,
@@ -65,7 +65,7 @@ class ObjectLedger(BaseMQTTPubSub):
         Parameters
         ----------
         hostname (str): Name of host
-        config_topic: str
+        config_json_topic: str
             MQTT topic for subscribing to config messages
         ads_b_json_topic: str
             MQTT topic for subscribing to ADS-B messages
@@ -97,7 +97,7 @@ class ObjectLedger(BaseMQTTPubSub):
         # Parent class handles kwargs, including MQTT IP
         super().__init__(**kwargs)
         self.hostname = hostname
-        self.config_topic = config_topic
+        self.config_json_topic = config_json_topic
         self.ads_b_json_topic = ads_b_json_topic
         self.ais_json_topic = ais_json_topic
         self.ledger_output_topic = ledger_output_topic
@@ -185,7 +185,7 @@ class ObjectLedger(BaseMQTTPubSub):
         logging.info(f"Processing config message data: {data}")
         config = data["object-ledger"]
         self.hostname = config.get("hostname", self.hostname)
-        self.config_topic = config.get("config_topic", self.config_topic)
+        self.config_json_topic = config.get("config_json_topic", self.config_json_topic)
         self.ads_b_json_topic = config.get("ads_b_json_topic", self.ads_b_json_topic)
         self.ais_json_topic = config.get("ais_json_topic", self.ais_json_topic)
         self.ledger_output_topic = config.get(
@@ -232,7 +232,7 @@ class ObjectLedger(BaseMQTTPubSub):
         """Logs all parameters that can be set on construction."""
         config = {
             "hostname": self.hostname,
-            "config_topic": self.config_topic,
+            "config_json_topic": self.config_json_topic,
             "ads_b_json_topic": self.ads_b_json_topic,
             "ais_json_topic": self.ais_json_topic,
             "ledger_output_topic": self.ledger_output_topic,
@@ -413,7 +413,7 @@ class ObjectLedger(BaseMQTTPubSub):
         schedule.every(self.publish_interval).seconds.do(self._publish_ledger)
 
         # Subscribe to required topics
-        self.add_subscribe_topic(self.config_topic, self._config_callback)
+        self.add_subscribe_topic(self.config_json_topic, self._config_callback)
         self.add_subscribe_topic(self.ads_b_json_topic, self._state_callback)
         self.add_subscribe_topic(self.ais_json_topic, self._state_callback)
 
@@ -455,7 +455,7 @@ def make_ledger() -> ObjectLedger:
     return ObjectLedger(
         mqtt_ip=os.getenv("MQTT_IP", "mqtt"),
         hostname=os.environ.get("HOSTNAME", "TBC"),
-        config_topic=os.getenv("CONFIG_TOPIC", "TBC"),
+        config_json_topic=os.getenv("CONFIG_JSON_TOPIC", "TBC"),
         ads_b_json_topic=os.getenv("ADS_B_JSON_TOPIC", "TBC"),
         ais_json_topic=os.getenv("AIS_JSON_TOPIC", "TBC"),
         ledger_output_topic=os.getenv("LEDGER_OUTPUT_TOPIC", "TBC"),
