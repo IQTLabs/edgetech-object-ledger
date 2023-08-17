@@ -12,32 +12,11 @@ import traceback
 from typing import Any, Dict, Union
 import sys
 
-import coloredlogs
 import paho.mqtt.client as mqtt
 import pandas as pd
 import schedule
 
 from base_mqtt_pub_sub import BaseMQTTPubSub
-
-STYLES = {
-    "critical": {"bold": True, "color": "red"},
-    "debug": {"color": "green"},
-    "error": {"color": "red"},
-    "info": {"color": "white"},
-    "notice": {"color": "magenta"},
-    "spam": {"color": "green", "faint": True},
-    "success": {"bold": True, "color": "green"},
-    "verbose": {"color": "blue"},
-    "warning": {"color": "yellow"},
-}
-coloredlogs.install(
-    level=os.environ.get("LOG_LEVEL", "INFO"),
-    fmt="%(asctime)s.%(msecs)03d \033[0;90m%(levelname)-8s "
-    ""
-    "\033[0;36m%(filename)-18s%(lineno)3d\033[00m "
-    "%(message)s",
-    level_styles=STYLES,
-)
 
 
 class ObjectLedger(BaseMQTTPubSub):
@@ -128,6 +107,7 @@ class ObjectLedger(BaseMQTTPubSub):
         ]
         self.ledger = pd.DataFrame(columns=self.required_columns)
         self.ledger.set_index("object_id", inplace=True)
+        self.ledger_job = None
 
         # Update max entry age dictionary
         self._set_max_entry_age()
@@ -178,7 +158,7 @@ class ObjectLedger(BaseMQTTPubSub):
         None
         """
         # Assign data attributes allowed to change during operation,
-        # ignoring config message data without a "object-ledger" key
+        # ignoring config message data without an "object-ledger" key
         data = json.loads(self.decode_payload(msg)["Configuration"])
         if "object-ledger" not in data:
             return
@@ -208,6 +188,13 @@ class ObjectLedger(BaseMQTTPubSub):
 
         # Update max entry age dictionary
         self._set_max_entry_age()
+
+        # Reschedule ledger job
+        if self.ledger_job is not None:
+            schedule.cancel_job(self.ledger_job)
+        self.ledger_job = schedule.every(self.publish_interval).seconds.do(
+            self._publish_ledger
+        )
 
         # Log configuration parameters
         self._log_config()
@@ -267,7 +254,7 @@ class ObjectLedger(BaseMQTTPubSub):
         msg: Union[mqtt.MQTTMessage, Dict[Any, Any]],
     ) -> None:
         """
-        Process state message.
+        Process a state message.
 
         Parameters
         ----------
@@ -410,7 +397,9 @@ class ObjectLedger(BaseMQTTPubSub):
         )
 
         # Schedule publishing of ledger message
-        schedule.every(self.publish_interval).seconds.do(self._publish_ledger)
+        self.ledger_job = schedule.every(self.publish_interval).seconds.do(
+            self._publish_ledger
+        )
 
         # Subscribe to required topics
         self.add_subscribe_topic(self.config_json_topic, self._config_callback)
