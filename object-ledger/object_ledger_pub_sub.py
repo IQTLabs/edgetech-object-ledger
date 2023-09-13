@@ -27,9 +27,9 @@ class ObjectLedgerPubSub(BaseMQTTPubSub):
     def __init__(
         self,
         hostname: str,
-        ads_b_input_topic: str,
-        ais_input_topic: str,
-        ledger_output_topic: str,
+        ads_b_topic: str,
+        ais_json_topic: str,
+        ledger_topic: str,
         max_aircraft_entry_age: float = 60.0,
         max_ship_entry_age: float = 180.0,
         publish_interval: int = 1,
@@ -42,11 +42,11 @@ class ObjectLedgerPubSub(BaseMQTTPubSub):
         Parameters
         ----------
         hostname (str): Name of host
-        ads_b_input_topic: str
+        ads_b_topic: str
             MQTT topic for subscribing to ADS-B messages
-        ais_input_topic: str
-            MQTT topic for subscribing to AIS messages
-        ledger_output_topic: str,
+        ais_json_topic: str
+            MQTT topic for subscribing to AIS JSON messages
+        ledger_topic: str,
             MQTT topic for publishing a message containing the full
             ledger
         max_aircraft_entry_age: float
@@ -70,9 +70,9 @@ class ObjectLedgerPubSub(BaseMQTTPubSub):
         # Parent class handles kwargs, including MQTT IP
         super().__init__(**kwargs)
         self.hostname = hostname
-        self.ads_b_input_topic = ads_b_input_topic
-        self.ais_input_topic = ais_input_topic
-        self.ledger_output_topic = ledger_output_topic
+        self.ads_b_topic = ads_b_topic
+        self.ais_json_topic = ais_json_topic
+        self.ledger_topic = ledger_topic
         self.max_aircraft_entry_age = max_aircraft_entry_age
         self.max_ship_entry_age = max_ship_entry_age
         self.publish_interval = publish_interval
@@ -278,14 +278,14 @@ class ObjectLedgerPubSub(BaseMQTTPubSub):
             data_payload_type=data["type"],
             data_payload=data["payload"],
         )
-        success = self.publish_to_topic(self.ledger_output_topic, out_json)
+        success = self.publish_to_topic(self.ledger_topic, out_json)
         if success:
             logging.info(
-                f"Successfully sent data on channel {self.ledger_output_topic}: {data}"
+                f"Successfully sent data on channel {self.ledger_topic}: {data}"
             )
         else:
             logging.info(
-                f"Failed to send data on channel {self.ledger_output_topic}: {data}"
+                f"Failed to send data on channel {self.ledger_topic}: {data}"
             )
         return success
 
@@ -310,7 +310,7 @@ class ObjectLedgerPubSub(BaseMQTTPubSub):
 
         # Subscribe to required topics
         self.add_subscribe_topics(
-            [self.ads_b_input_topic, self.ais_input_topic],
+            [self.ads_b_topic, self.ais_json_topic],
             [self._state_callback, self._state_callback],
             [2, 2],
         )
@@ -343,9 +343,9 @@ if __name__ == "__main__":
     ledger = ObjectLedgerPubSub(
         mqtt_ip=os.getenv("MQTT_IP", "mqtt"),
         hostname=os.environ.get("HOSTNAME", ""),
-        ads_b_input_topic=os.getenv("ADS_B_INPUT_TOPIC", ""),
-        ais_input_topic=os.getenv("AIS_INPUT_TOPIC", ""),
-        ledger_output_topic=os.getenv("LEDGER_OUTPUT_TOPIC", ""),
+        ads_b_topic=os.getenv("ADS_B_TOPIC", ""),
+        ais_json_topic=os.getenv("AIS_JSON_TOPIC", ""),
+        ledger_topic=os.getenv("LEDGER_TOPIC", ""),
         max_aircraft_entry_age=float(os.getenv("MAX_AIRCRAFT_ENTRY_AGE", 60.0)),
         max_ship_entry_age=float(os.getenv("MAX_SHIP_ENTRY_AGE", 180.0)),
         publish_interval=int(os.getenv("PUBLISH_INTERVAL", 1)),
