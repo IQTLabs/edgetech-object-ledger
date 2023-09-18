@@ -99,11 +99,27 @@ class ObjectLedgerPubSub(BaseMQTTPubSub):
         ]
         self.ledger = pd.DataFrame(columns=self.required_columns)
         self.ledger.set_index("object_id", inplace=True)
+        self.exception = None
 
         # Update max entry age dictionary
         self._set_max_entry_age()
 
-    def decode_payload(self, msg: Union[mqtt.MQTTMessage, str]) -> Dict[Any, Any]:
+        # Log configuration parameters
+        logging.info(
+            f"""ObjectLedgerPubSub initialized with parameters:
+    hostname = {hostname}
+    ads_b_input_topic = {ads_b_input_topic}
+    ais_input_topic = {ais_input_topic}
+    ledger_output_topic = {ledger_output_topic}
+    max_aircraft_entry_age = {max_aircraft_entry_age}
+    max_ship_entry_age = {max_ship_entry_age}
+    publish_interval = {publish_interval}
+    heartbeat_interval = {heartbeat_interval}
+    continue_on_exception = {continue_on_exception}
+            """
+        )
+
+    def _decode_payload(self, msg: Union[mqtt.MQTTMessage, str]) -> Dict[Any, Any]:
         """
         Decode the payload carried by a message.
 
