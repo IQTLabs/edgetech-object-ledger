@@ -268,7 +268,7 @@ class ObjectLedgerPubSub(BaseMQTTPubSub):
             {
                 "type": "ObjectLedger",
                 "payload": self.ledger.to_json(),
-            }
+            },
         )
 
     def _send_data(self, data: Dict[str, str]) -> bool:
