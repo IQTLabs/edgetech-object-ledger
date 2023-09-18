@@ -192,45 +192,51 @@ class ObjectLedgerPubSub(BaseMQTTPubSub):
         -------
         None
         """
-        logging.info("Entered ledger state callback")
+        try:
+            logging.info("Entered ledger output callback")
 
-        # Populate required state based on message type
-        data = self.decode_payload(msg)
-        if "ADS-B" in data:
-            logging.info(f"Processing ADS-B state message data: {data}")
-            state = json.loads(data["ADS-B"])
-            state["object_id"] = state["icao_hex"]
-            state["object_type"] = "aircraft"
+            # Populate required state based on message type
+            data = self._decode_payload(msg)
+            if "ADS-B" in data:
+                logging.info(f"Processing ADS-B state message data: {data}")
+                state = json.loads(data["ADS-B"])
+                state["object_id"] = state["icao_hex"]
+                state["object_type"] = "aircraft"
 
-        elif "Decoded AIS" in data:
-            logging.info(f"Processing AIS state message data: {data}")
-            state = json.loads(data["Decoded AIS"])
-            state["object_id"] = state["mmsi"]
-            state["object_type"] = "ship"
-            state["track"] = state["course"]
-
-        else:
-            logging.info(f"Skipping state message data: {data}")
-            return
-
-        # Pop keys that are not required columns
-        [state.pop(key) for key in set(state.keys()) - set(self.required_columns)]
-
-        # Process required state
-        entry = pd.DataFrame(state, index=[state["object_id"]])
-        entry.set_index("object_id", inplace=True)
-        if entry.notna().all(axis=1).bool():
-            # Add or update the entry in the ledger
-            if not entry.index.isin(self.ledger.index):
-                logging.info(f"Adding entry state data for object id: {entry.index}")
-                self.ledger = pd.concat([self.ledger, entry], ignore_index=False)
+            elif "Decoded AIS" in data:
+                logging.info(f"Processing AIS state message data: {data}")
+                state = json.loads(data["Decoded AIS"])
+                state["object_id"] = state["mmsi"]
+                state["object_type"] = "ship"
+                state["track"] = state["course"]
 
             else:
-                logging.info(f"Updating entry state data for object id: {entry.index}")
-                self.ledger.update(entry)
+                logging.info(f"Skipping state message data: {data}")
+                return
 
-        else:
-            logging.info(f"Invalid entry: {entry}")
+            # Pop keys that are not required columns
+            [state.pop(key) for key in set(state.keys()) - set(self.required_columns)]
+
+            # Process required state
+            entry = pd.DataFrame(state, index=[state["object_id"]])
+            entry.set_index("object_id", inplace=True)
+            if entry.notna().all(axis=1).bool():
+                # Add or update the entry in the ledger
+                if not entry.index.isin(self.ledger.index):
+                    logging.info(f"Adding entry state data for object id: {entry.index}")
+                    self.ledger = pd.concat([self.ledger, entry], ignore_index=False)
+
+                else:
+                    logging.info(f"Updating entry state data for object id: {entry.index}")
+                    self.ledger.update(entry)
+
+            else:
+                logging.info(f"Invalid entry: {entry}")
+
+        except Exception as exception:
+
+            # Set exception
+            self.exception = exception
 
     def _publish_ledger(self) -> None:
         """Drop ledger entries if their age exceeds the maximum
@@ -336,6 +342,12 @@ class ObjectLedgerPubSub(BaseMQTTPubSub):
             try:
                 # Run pending scheduled messages
                 schedule.run_pending()
+
+                # Raise exception
+                if self.exception is not None:
+                    exception = self.exception
+                    self.exception = None
+                    raise exception
 
                 # Prevent the loop from running at CPU time
                 sleep(0.0001)
