@@ -114,7 +114,7 @@ class ObjectLedgerPubSub(BaseMQTTPubSub):
             f"""ObjectLedgerPubSub initialized with parameters:
     hostname = {hostname}
     ads_b_topic = {ads_b_topic}
-    ais_topic = {ais_topic}
+    ais_json_topic = {ais_json_topic}
     ledger_topic = {ledger_topic}
     max_aircraft_entry_age = {max_aircraft_entry_age}
     max_ship_entry_age = {max_ship_entry_age}
