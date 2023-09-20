@@ -130,6 +130,7 @@ dmypy.json
 
 # Local
 *~
+.DS_Store
 .bashrc
 .tern-port
 axis_ptz_utilities.py
