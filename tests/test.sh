@@ -12,4 +12,4 @@ echo -e "${PURPLE}Run integration tests${NC}"
 pytest test_integration.py
 
 echo -e "${PURPLE}Tear down integration tests${NC}"
-# TODO: rm test-data/test-output.json
+rm test-data/test-output.json
