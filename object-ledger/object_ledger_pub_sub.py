@@ -8,6 +8,7 @@ import json
 import logging
 import os
 from time import sleep
+import threading
 import traceback
 from types import FrameType
 from typing import Any, Dict, Optional, Union
@@ -105,6 +106,7 @@ class ObjectLedgerPubSub(BaseMQTTPubSub):
         self.ledger = pd.DataFrame(columns=self.required_columns)
         self.ledger.set_index("object_id", inplace=True)
         self.exception = None
+        self.state_lock = threading.Lock()
 
         # Update max entry age dictionary
         self._set_max_entry_age()
@@ -223,24 +225,25 @@ class ObjectLedgerPubSub(BaseMQTTPubSub):
             # Pop keys that are not required columns
             [state.pop(key) for key in set(state.keys()) - set(self.required_columns)]
 
-            # Process required state
-            entry = pd.DataFrame(state, index=[state["object_id"]])
-            entry.set_index("object_id", inplace=True)
-            if entry.notna().all(axis=1).bool():
+            # Acquire, then release a lock on the callback thread to
+            # protect Pandas operations
+            with self.state_lock:
                 # Add or update the entry in the ledger
-                if not entry.index.isin(self.ledger.index):
-                    logging.info(f"Adding entry state data for object id: {entry.index}")
-                    self.ledger = pd.concat([self.ledger, entry], ignore_index=False)
+                entry = pd.DataFrame(state, index=[state["object_id"]])
+                entry.set_index("object_id", inplace=True)
+                if entry.notna().all(axis=1).bool():
+                    if not entry.index.isin(self.ledger.index):
+                        logging.info(f"Adding entry state data for object id: {entry.index}")
+                        self.ledger = pd.concat([self.ledger, entry], ignore_index=False)
+
+                    else:
+                        logging.info(f"Updating entry state data for object id: {entry.index}")
+                        self.ledger.update(entry)
 
                 else:
-                    logging.info(f"Updating entry state data for object id: {entry.index}")
-                    self.ledger.update(entry)
-
-            else:
-                logging.info(f"Invalid entry: {entry}")
+                    logging.info(f"Invalid entry: {entry}")
 
         except Exception as exception:
-
             # Set exception
             self.exception = exception
 
@@ -312,9 +315,7 @@ class ObjectLedgerPubSub(BaseMQTTPubSub):
                 f"Successfully sent data on channel {self.ledger_topic}: {data}"
             )
         else:
-            logging.info(
-                f"Failed to send data on channel {self.ledger_topic}: {data}"
-            )
+            logging.info(f"Failed to send data on channel {self.ledger_topic}: {data}")
         return success
 
     def main(self) -> None:
