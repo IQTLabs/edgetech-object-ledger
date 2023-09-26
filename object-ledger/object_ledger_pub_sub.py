@@ -8,8 +8,10 @@ import json
 import logging
 import os
 from time import sleep
+import threading
 import traceback
-from typing import Any, Dict, Union
+from types import FrameType
+from typing import Any, Dict, Optional, Union
 import sys
 
 import paho.mqtt.client as mqtt
@@ -27,13 +29,14 @@ class ObjectLedgerPubSub(BaseMQTTPubSub):
     def __init__(
         self,
         hostname: str,
-        ads_b_input_topic: str,
-        ais_input_topic: str,
-        ledger_output_topic: str,
+        ads_b_topic: str,
+        ais_json_topic: str,
+        ledger_topic: str,
         max_aircraft_entry_age: float = 60.0,
         max_ship_entry_age: float = 180.0,
         publish_interval: int = 1,
         heartbeat_interval: int = 10,
+        loop_interval: float = 0.001,
         continue_on_exception: bool = False,
         **kwargs: Any,
     ):
@@ -42,11 +45,11 @@ class ObjectLedgerPubSub(BaseMQTTPubSub):
         Parameters
         ----------
         hostname (str): Name of host
-        ads_b_input_topic: str
+        ads_b_topic: str
             MQTT topic for subscribing to ADS-B messages
-        ais_input_topic: str
-            MQTT topic for subscribing to AIS messages
-        ledger_output_topic: str,
+        ais_json_topic: str
+            MQTT topic for subscribing to AIS JSON messages
+        ledger_topic: str,
             MQTT topic for publishing a message containing the full
             ledger
         max_aircraft_entry_age: float
@@ -59,6 +62,8 @@ class ObjectLedgerPubSub(BaseMQTTPubSub):
             Interval at which the ledger message is published [s]
         heartbeat_interval: int
             Interval at which heartbeat message is published [s]
+        loop_interval: int
+            Interval during which main loop sleeps [s]
         continue_on_exception: bool
             Continue on unhandled exceptions if True, raise exception
             if False (the default)
@@ -70,13 +75,14 @@ class ObjectLedgerPubSub(BaseMQTTPubSub):
         # Parent class handles kwargs, including MQTT IP
         super().__init__(**kwargs)
         self.hostname = hostname
-        self.ads_b_input_topic = ads_b_input_topic
-        self.ais_input_topic = ais_input_topic
-        self.ledger_output_topic = ledger_output_topic
+        self.ads_b_topic = ads_b_topic
+        self.ais_json_topic = ais_json_topic
+        self.ledger_topic = ledger_topic
         self.max_aircraft_entry_age = max_aircraft_entry_age
         self.max_ship_entry_age = max_ship_entry_age
         self.publish_interval = publish_interval
         self.heartbeat_interval = heartbeat_interval
+        self.loop_interval = loop_interval
         self.continue_on_exception = continue_on_exception
 
         # Connect MQTT client
@@ -99,11 +105,29 @@ class ObjectLedgerPubSub(BaseMQTTPubSub):
         ]
         self.ledger = pd.DataFrame(columns=self.required_columns)
         self.ledger.set_index("object_id", inplace=True)
+        self.exception = None
+        self.state_lock = threading.Lock()
 
         # Update max entry age dictionary
         self._set_max_entry_age()
 
-    def decode_payload(self, msg: Union[mqtt.MQTTMessage, str]) -> Dict[Any, Any]:
+        # Log configuration parameters
+        logging.info(
+            f"""ObjectLedgerPubSub initialized with parameters:
+    hostname = {hostname}
+    ads_b_topic = {ads_b_topic}
+    ais_json_topic = {ais_json_topic}
+    ledger_topic = {ledger_topic}
+    max_aircraft_entry_age = {max_aircraft_entry_age}
+    max_ship_entry_age = {max_ship_entry_age}
+    publish_interval = {publish_interval}
+    heartbeat_interval = {heartbeat_interval}
+    loop_interval = {loop_interval}
+    continue_on_exception = {continue_on_exception}
+            """
+        )
+
+    def _decode_payload(self, msg: Union[mqtt.MQTTMessage, str]) -> Dict[Any, Any]:
         """
         Decode the payload carried by a message.
 
@@ -176,45 +200,52 @@ class ObjectLedgerPubSub(BaseMQTTPubSub):
         -------
         None
         """
-        logging.info("Entered ledger state callback")
+        try:
+            logging.info("Entered ledger output callback")
 
-        # Populate required state based on message type
-        data = self.decode_payload(msg)
-        if "ADS-B" in data:
-            logging.info(f"Processing ADS-B state message data: {data}")
-            state = json.loads(data["ADS-B"])
-            state["object_id"] = state["icao_hex"]
-            state["object_type"] = "aircraft"
+            # Populate required state based on message type
+            data = self._decode_payload(msg)
+            if "ADS-B" in data:
+                logging.info(f"Processing ADS-B state message data: {data}")
+                state = json.loads(data["ADS-B"])
+                state["object_id"] = state["icao_hex"]
+                state["object_type"] = "aircraft"
 
-        elif "Decoded AIS" in data:
-            logging.info(f"Processing AIS state message data: {data}")
-            state = json.loads(data["Decoded AIS"])
-            state["object_id"] = state["mmsi"]
-            state["object_type"] = "ship"
-            state["track"] = state["course"]
-
-        else:
-            logging.info(f"Skipping state message data: {data}")
-            return
-
-        # Pop keys that are not required columns
-        [state.pop(key) for key in set(state.keys()) - set(self.required_columns)]
-
-        # Process required state
-        entry = pd.DataFrame(state, index=[state["object_id"]])
-        entry.set_index("object_id", inplace=True)
-        if entry.notna().all(axis=1).bool():
-            # Add or update the entry in the ledger
-            if not entry.index.isin(self.ledger.index):
-                logging.info(f"Adding entry state data for object id: {entry.index}")
-                self.ledger = pd.concat([self.ledger, entry], ignore_index=False)
+            elif "Decoded AIS" in data:
+                logging.info(f"Processing AIS state message data: {data}")
+                state = json.loads(data["Decoded AIS"])
+                state["object_id"] = state["mmsi"]
+                state["object_type"] = "ship"
+                state["track"] = state["course"]
 
             else:
-                logging.info(f"Updating entry state data for object id: {entry.index}")
-                self.ledger.update(entry)
+                logging.info(f"Skipping state message data: {data}")
+                return
 
-        else:
-            logging.info(f"Invalid entry: {entry}")
+            # Pop keys that are not required columns
+            [state.pop(key) for key in set(state.keys()) - set(self.required_columns)]
+
+            # Acquire, then release a lock on the callback thread to
+            # protect Pandas operations
+            with self.state_lock:
+                # Add or update the entry in the ledger
+                entry = pd.DataFrame(state, index=[state["object_id"]])
+                entry.set_index("object_id", inplace=True)
+                if entry.notna().all(axis=1).bool():
+                    if not entry.index.isin(self.ledger.index):
+                        logging.info(f"Adding entry state data for object id: {entry.index}")
+                        self.ledger = pd.concat([self.ledger, entry], ignore_index=False)
+
+                    else:
+                        logging.info(f"Updating entry state data for object id: {entry.index}")
+                        self.ledger.update(entry)
+
+                else:
+                    logging.info(f"Invalid entry: {entry}")
+
+        except Exception as exception:
+            # Set exception
+            self.exception = exception
 
     def _publish_ledger(self) -> None:
         """Drop ledger entries if their age exceeds the maximum
@@ -246,7 +277,7 @@ class ObjectLedgerPubSub(BaseMQTTPubSub):
             {
                 "type": "ObjectLedger",
                 "payload": self.ledger.to_json(),
-            }
+            },
         )
 
     def _send_data(self, data: Dict[str, str]) -> bool:
@@ -278,15 +309,13 @@ class ObjectLedgerPubSub(BaseMQTTPubSub):
             data_payload_type=data["type"],
             data_payload=data["payload"],
         )
-        success = self.publish_to_topic(self.ledger_output_topic, out_json)
+        success = self.publish_to_topic(self.ledger_topic, out_json)
         if success:
             logging.info(
-                f"Successfully sent data on channel {self.ledger_output_topic}: {data}"
+                f"Successfully sent data on channel {self.ledger_topic}: {data}"
             )
         else:
-            logging.info(
-                f"Failed to send data on channel {self.ledger_output_topic}: {data}"
-            )
+            logging.info(f"Failed to send data on channel {self.ledger_topic}: {data}")
         return success
 
     def main(self) -> None:
@@ -310,7 +339,7 @@ class ObjectLedgerPubSub(BaseMQTTPubSub):
 
         # Subscribe to required topics
         self.add_subscribe_topics(
-            [self.ads_b_input_topic, self.ais_input_topic],
+            [self.ads_b_topic, self.ais_json_topic],
             [self._state_callback, self._state_callback],
             [2, 2],
         )
@@ -321,8 +350,14 @@ class ObjectLedgerPubSub(BaseMQTTPubSub):
                 # Run pending scheduled messages
                 schedule.run_pending()
 
+                # Raise exception
+                if self.exception is not None:
+                    exception = self.exception
+                    self.exception = None
+                    raise exception
+
                 # Prevent the loop from running at CPU time
-                sleep(0.0001)
+                sleep(self.loop_interval)
 
             except KeyboardInterrupt as exception:
                 # If keyboard interrupt, fail gracefully
@@ -343,13 +378,14 @@ if __name__ == "__main__":
     ledger = ObjectLedgerPubSub(
         mqtt_ip=os.getenv("MQTT_IP", "mqtt"),
         hostname=os.environ.get("HOSTNAME", ""),
-        ads_b_input_topic=os.getenv("ADS_B_INPUT_TOPIC", ""),
-        ais_input_topic=os.getenv("AIS_INPUT_TOPIC", ""),
-        ledger_output_topic=os.getenv("LEDGER_OUTPUT_TOPIC", ""),
+        ads_b_topic=os.getenv("ADS_B_TOPIC", ""),
+        ais_json_topic=os.getenv("AIS_JSON_TOPIC", ""),
+        ledger_topic=os.getenv("LEDGER_TOPIC", ""),
         max_aircraft_entry_age=float(os.getenv("MAX_AIRCRAFT_ENTRY_AGE", 60.0)),
         max_ship_entry_age=float(os.getenv("MAX_SHIP_ENTRY_AGE", 180.0)),
         publish_interval=int(os.getenv("PUBLISH_INTERVAL", 1)),
         heartbeat_interval=int(os.getenv("HEARTBEAT_INTERVAL", 10)),
+        loop_interval=float(os.getenv("LOOP_INTERVAL", 0.001)),
         continue_on_exception=ast.literal_eval(
             os.environ.get("CONTINUE_ON_EXCEPTION", "False")
         ),
