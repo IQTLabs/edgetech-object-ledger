@@ -201,25 +201,25 @@ class ObjectLedgerPubSub(BaseMQTTPubSub):
         None
         """
         try:
-            logging.info("Entered ledger output callback")
+            logging.debug("Entered ledger output callback")
 
             # Populate required state based on message type
             data = self._decode_payload(msg)
             if "ADS-B" in data:
-                logging.info(f"Processing ADS-B state message data: {data}")
+                logging.debug(f"Processing ADS-B state message data: {data}")
                 state = json.loads(data["ADS-B"])
                 state["object_id"] = state["icao_hex"]
                 state["object_type"] = "aircraft"
 
             elif "Decoded AIS" in data:
-                logging.info(f"Processing AIS state message data: {data}")
+                logging.debug(f"Processing AIS state message data: {data}")
                 state = json.loads(data["Decoded AIS"])
                 state["object_id"] = state["mmsi"]
                 state["object_type"] = "ship"
                 state["track"] = state["course"]
 
             else:
-                logging.info(f"Skipping state message data: {data}")
+                logging.debug(f"Skipping state message data: {data}")
                 return
 
             # Pop keys that are not required columns
@@ -233,15 +233,15 @@ class ObjectLedgerPubSub(BaseMQTTPubSub):
                 entry.set_index("object_id", inplace=True)
                 if entry.notna().all(axis=1).bool():
                     if not entry.index.isin(self.ledger.index):
-                        logging.info(f"Adding entry state data for object id: {entry.index}")
+                        logging.debug(f"Adding entry state data for object id: {entry.index}")
                         self.ledger = pd.concat([self.ledger, entry], ignore_index=False)
 
                     else:
-                        logging.info(f"Updating entry state data for object id: {entry.index}")
+                        logging.debug(f"Updating entry state data for object id: {entry.index}")
                         self.ledger.update(entry)
 
                 else:
-                    logging.info(f"Invalid entry: {entry}")
+                    logging.debug(f"Invalid entry: {entry}")
 
         except Exception as exception:
             # Set exception
@@ -266,7 +266,7 @@ class ObjectLedgerPubSub(BaseMQTTPubSub):
             > self.ledger["object_type"].apply(self._get_max_entry_age)
         ].index
         if not index.empty:
-            logging.info(f"Dropping entry for object ids: {index}")
+            logging.debug(f"Dropping entry for object ids: {index}")
             self.ledger.drop(
                 index,
                 inplace=True,
@@ -311,11 +311,11 @@ class ObjectLedgerPubSub(BaseMQTTPubSub):
         )
         success = self.publish_to_topic(self.ledger_topic, out_json)
         if success:
-            logging.info(
+            logging.debug(
                 f"Successfully sent data on channel {self.ledger_topic}: {data}"
             )
         else:
-            logging.info(f"Failed to send data on channel {self.ledger_topic}: {data}")
+            logging.debug(f"Failed to send data on channel {self.ledger_topic}: {data}")
         return success
 
     def main(self) -> None:
