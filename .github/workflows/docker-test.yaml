@@ -21,12 +21,6 @@ jobs:
       with:
         version: latest
 
-    - name: Get changes
-      id: identify
-      uses: jitterbit/get-changed-files@v1
-    - run: |
-        echo ${{ steps.files.output.all }}
-
     - name: Build image
       env: 
         DOCKER_FOLDER: "object-ledger"
