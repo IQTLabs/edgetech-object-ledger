@@ -226,13 +226,13 @@ class ObjectLedgerPubSub(BaseMQTTPubSub):
             # Pop keys that are not required columns
             [state.pop(key) for key in set(state.keys()) - set(self.required_columns)]
 
-            # Add or update the entry in the ledger
-            entry = pd.DataFrame(state, index=[state["object_id"]])
-            entry.set_index("object_id", inplace=True)
-            if entry.notna().all(axis=1).bool():
-                # Acquire, then release a lock on the callback thread
-                # to protect Pandas operations
-                with self.state_lock:
+            # Acquire, then release a lock on the callback thread to
+            # protect Pandas operations
+            with self.state_lock:
+                # Add or update the entry in the ledger
+                entry = pd.DataFrame(state, index=[state["object_id"]])
+                entry.set_index("object_id", inplace=True)
+                if entry.notna().all(axis=1).bool():
                     if not entry.index.isin(self.ledger.index):
                         logging.debug(
                             f"Adding entry state data for object id: {entry.index}"
@@ -247,8 +247,8 @@ class ObjectLedgerPubSub(BaseMQTTPubSub):
                         )
                         self.ledger.update(entry)
 
-            else:
-                logging.debug(f"Invalid entry: {entry}")
+                else:
+                    logging.debug(f"Invalid entry: {entry}")
 
         except Exception as exception:
             # Set exception
