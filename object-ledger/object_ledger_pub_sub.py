@@ -10,7 +10,6 @@ import os
 from time import sleep
 import threading
 import traceback
-from types import FrameType
 from typing import Any, Dict, Optional, Union
 import sys
 
@@ -86,7 +85,9 @@ class ObjectLedgerPubSub(BaseMQTTPubSub):
         self.continue_on_exception = continue_on_exception
 
         # Connect MQTT client
-        logging.info("Connecting MQTT client")
+        logging.info(
+            f"Connecting MQTT client to broker at {self.mqtt_ip}:{self.mqtt_port}"
+        )
         self.connect_client()
         sleep(1)
         self.publish_registration("Object Ledger Module Registration")
@@ -233,11 +234,17 @@ class ObjectLedgerPubSub(BaseMQTTPubSub):
                 entry.set_index("object_id", inplace=True)
                 if entry.notna().all(axis=1).bool():
                     if not entry.index.isin(self.ledger.index):
-                        logging.debug(f"Adding entry state data for object id: {entry.index}")
-                        self.ledger = pd.concat([self.ledger, entry], ignore_index=False)
+                        logging.debug(
+                            f"Adding entry state data for object id: {entry.index}"
+                        )
+                        self.ledger = pd.concat(
+                            [self.ledger, entry], ignore_index=False
+                        )
 
                     else:
-                        logging.debug(f"Updating entry state data for object id: {entry.index}")
+                        logging.debug(
+                            f"Updating entry state data for object id: {entry.index}"
+                        )
                         self.ledger.update(entry)
 
                 else:
@@ -245,7 +252,7 @@ class ObjectLedgerPubSub(BaseMQTTPubSub):
 
         except Exception as exception:
             # Set exception
-            self.exception = exception
+            self.exception = exception  # type: ignore
 
     def _publish_ledger(self) -> None:
         """Drop ledger entries if their age exceeds the maximum
@@ -266,11 +273,14 @@ class ObjectLedgerPubSub(BaseMQTTPubSub):
             > self.ledger["object_type"].apply(self._get_max_entry_age)
         ].index
         if not index.empty:
-            logging.debug(f"Dropping entry for object ids: {index}")
-            self.ledger.drop(
-                index,
-                inplace=True,
-            )
+            # Acquire, then release a lock on the callback thread to
+            # protect Pandas operations
+            with self.state_lock:
+                logging.debug(f"Dropping entry for object ids: {index}")
+                self.ledger.drop(
+                    index,
+                    inplace=True,
+                )
 
         # Send the full ledger to MQTT
         self._send_data(
