@@ -234,11 +234,17 @@ class ObjectLedgerPubSub(BaseMQTTPubSub):
                 # to protect Pandas operations
                 with self.state_lock:
                     if not entry.index.isin(self.ledger.index):
-                        logging.debug(f"Adding entry state data for object id: {entry.index}")
-                        self.ledger = pd.concat([self.ledger, entry], ignore_index=False)
+                        logging.debug(
+                            f"Adding entry state data for object id: {entry.index}"
+                        )
+                        self.ledger = pd.concat(
+                            [self.ledger, entry], ignore_index=False
+                        )
 
                     else:
-                        logging.debug(f"Updating entry state data for object id: {entry.index}")
+                        logging.debug(
+                            f"Updating entry state data for object id: {entry.index}"
+                        )
                         self.ledger.update(entry)
 
             else:
