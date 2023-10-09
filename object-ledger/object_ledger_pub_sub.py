@@ -10,7 +10,7 @@ import os
 from time import sleep
 import threading
 import traceback
-from typing import Any, Dict, Optional, Union
+from typing import Any, Dict, Union
 import sys
 
 import paho.mqtt.client as mqtt
