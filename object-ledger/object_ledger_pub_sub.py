@@ -310,7 +310,7 @@ class ObjectLedgerPubSub(BaseMQTTPubSub):
         bool
             Returns True if successful publish, else False
         """
-        # TODO: Provide fields via environment or command line
+        # TODO: Provide fields via environment, or command line
         out_json = self.generate_payload_json(
             push_timestamp=int(datetime.utcnow().timestamp()),
             device_type="TBC",
