@@ -10,7 +10,7 @@ import os
 from time import sleep
 import threading
 import traceback
-from typing import Any, Dict, Optional, Union
+from typing import Any, Dict, Union
 import sys
 
 import paho.mqtt.client as mqtt
@@ -36,6 +36,7 @@ class ObjectLedgerPubSub(BaseMQTTPubSub):
         publish_interval: int = 1,
         heartbeat_interval: int = 10,
         loop_interval: float = 0.001,
+        log_level: str = "INFO",
         continue_on_exception: bool = False,
         **kwargs: Any,
     ):
@@ -63,6 +64,8 @@ class ObjectLedgerPubSub(BaseMQTTPubSub):
             Interval at which heartbeat message is published [s]
         loop_interval: int
             Interval during which main loop sleeps [s]
+        log_level (str): One of 'NOTSET', 'DEBUG', 'INFO', 'WARN',
+            'WARNING', 'ERROR', 'FATAL', 'CRITICAL'
         continue_on_exception: bool
             Continue on unhandled exceptions if True, raise exception
             if False (the default)
@@ -82,6 +85,7 @@ class ObjectLedgerPubSub(BaseMQTTPubSub):
         self.publish_interval = publish_interval
         self.heartbeat_interval = heartbeat_interval
         self.loop_interval = loop_interval
+        self.log_level = log_level
         self.continue_on_exception = continue_on_exception
 
         # Connect MQTT client
@@ -124,6 +128,7 @@ class ObjectLedgerPubSub(BaseMQTTPubSub):
     publish_interval = {publish_interval}
     heartbeat_interval = {heartbeat_interval}
     loop_interval = {loop_interval}
+    log_level = {log_level}
     continue_on_exception = {continue_on_exception}
             """
         )
@@ -305,7 +310,7 @@ class ObjectLedgerPubSub(BaseMQTTPubSub):
         bool
             Returns True if successful publish, else False
         """
-        # TODO: Provide fields via environment or command line
+        # TODO: Provide fields via environment, or command line
         out_json = self.generate_payload_json(
             push_timestamp=int(datetime.utcnow().timestamp()),
             device_type="TBC",
@@ -396,6 +401,7 @@ if __name__ == "__main__":
         publish_interval=int(os.getenv("PUBLISH_INTERVAL", 1)),
         heartbeat_interval=int(os.getenv("HEARTBEAT_INTERVAL", 10)),
         loop_interval=float(os.getenv("LOOP_INTERVAL", 0.001)),
+        log_level=os.environ.get("LOG_LEVEL", "INFO"),
         continue_on_exception=ast.literal_eval(
             os.environ.get("CONTINUE_ON_EXCEPTION", "False")
         ),
