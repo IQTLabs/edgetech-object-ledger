@@ -28,7 +28,7 @@ class ObjectLedgerPubSub(BaseMQTTPubSub):
     def __init__(
         self,
         hostname: str,
-        ads_b_topic: str,
+        ads_b_json_topic: str,
         ais_json_topic: str,
         ledger_topic: str,
         max_aircraft_entry_age: float = 60.0,
@@ -45,7 +45,7 @@ class ObjectLedgerPubSub(BaseMQTTPubSub):
         Parameters
         ----------
         hostname (str): Name of host
-        ads_b_topic: str
+        ads_b_json_topic: str
             MQTT topic for subscribing to ADS-B messages
         ais_json_topic: str
             MQTT topic for subscribing to AIS JSON messages
@@ -77,7 +77,7 @@ class ObjectLedgerPubSub(BaseMQTTPubSub):
         # Parent class handles kwargs, including MQTT IP
         super().__init__(**kwargs)
         self.hostname = hostname
-        self.ads_b_topic = ads_b_topic
+        self.ads_b_json_topic = ads_b_json_topic
         self.ais_json_topic = ais_json_topic
         self.ledger_topic = ledger_topic
         self.max_aircraft_entry_age = max_aircraft_entry_age
@@ -120,7 +120,7 @@ class ObjectLedgerPubSub(BaseMQTTPubSub):
         logging.info(
             f"""ObjectLedgerPubSub initialized with parameters:
     hostname = {hostname}
-    ads_b_topic = {ads_b_topic}
+    ads_b_json_topic = {ads_b_json_topic}
     ais_json_topic = {ais_json_topic}
     ledger_topic = {ledger_topic}
     max_aircraft_entry_age = {max_aircraft_entry_age}
@@ -354,7 +354,7 @@ class ObjectLedgerPubSub(BaseMQTTPubSub):
 
         # Subscribe to required topics
         self.add_subscribe_topics(
-            [self.ads_b_topic, self.ais_json_topic],
+            [self.ads_b_json_topic, self.ais_json_topic],
             [self._state_callback, self._state_callback],
             [2, 2],
         )
@@ -393,7 +393,7 @@ if __name__ == "__main__":
     ledger = ObjectLedgerPubSub(
         mqtt_ip=os.getenv("MQTT_IP", "mqtt"),
         hostname=os.environ.get("HOSTNAME", ""),
-        ads_b_topic=os.getenv("ADS_B_TOPIC", ""),
+        ads_b_json_topic=os.getenv("ADS_B_JSON_TOPIC", ""),
         ais_json_topic=os.getenv("AIS_JSON_TOPIC", ""),
         ledger_topic=os.getenv("LEDGER_TOPIC", ""),
         max_aircraft_entry_age=float(os.getenv("MAX_AIRCRAFT_ENTRY_AGE", 60.0)),
