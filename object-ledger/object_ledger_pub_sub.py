@@ -33,7 +33,7 @@ class ObjectLedgerPubSub(BaseMQTTPubSub):
         ledger_topic: str,
         max_aircraft_entry_age: float = 60.0,
         max_ship_entry_age: float = 180.0,
-        publish_interval: int = 1,
+        publish_interval: float = 1.0,
         heartbeat_interval: int = 10,
         loop_interval: float = 0.001,
         log_level: str = "INFO",
@@ -58,7 +58,7 @@ class ObjectLedgerPubSub(BaseMQTTPubSub):
         max_ship_entry_age: float
             Maximum age of a ship entry in the ledger, after which it
             is dropped [s]
-        publish_interval: int
+        publish_interval: float
             Interval at which the ledger message is published [s]
         heartbeat_interval: int
             Interval at which heartbeat message is published [s]
@@ -107,6 +107,8 @@ class ObjectLedgerPubSub(BaseMQTTPubSub):
             "track",
             "horizontal_velocity",
             "vertical_velocity",
+            "flight",
+            "squawk"
         ]
         self.ledger = pd.DataFrame(columns=self.required_columns)
         self.ledger.set_index("object_id", inplace=True)
@@ -353,11 +355,10 @@ class ObjectLedgerPubSub(BaseMQTTPubSub):
         schedule.every(self.publish_interval).seconds.do(self._publish_ledger)
 
         # Subscribe to required topics
-        self.add_subscribe_topics(
-            [self.ads_b_json_topic, self.ais_json_topic],
-            [self._state_callback, self._state_callback],
-            [2, 2],
-        )
+        if not self.ads_b_json_topic == "":
+            self.add_subscribe_topics(self.ads_b_json_topic, self._state_callback)
+        if not self.ais_json_topic == "":
+            self.add_subscribe_topics(self.ais_json_topic, self._state_callback)
 
         # Enter the main loop
         while True:
@@ -398,7 +399,7 @@ if __name__ == "__main__":
         ledger_topic=os.getenv("LEDGER_TOPIC", ""),
         max_aircraft_entry_age=float(os.getenv("MAX_AIRCRAFT_ENTRY_AGE", 60.0)),
         max_ship_entry_age=float(os.getenv("MAX_SHIP_ENTRY_AGE", 180.0)),
-        publish_interval=int(os.getenv("PUBLISH_INTERVAL", 1)),
+        publish_interval=float(os.getenv("PUBLISH_INTERVAL", 1.0)),
         heartbeat_interval=int(os.getenv("HEARTBEAT_INTERVAL", 10)),
         loop_interval=float(os.getenv("LOOP_INTERVAL", 0.001)),
         log_level=os.environ.get("LOG_LEVEL", "INFO"),
