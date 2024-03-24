@@ -356,9 +356,9 @@ class ObjectLedgerPubSub(BaseMQTTPubSub):
 
         # Subscribe to required topics
         if not self.ads_b_json_topic == "":
-            self.add_subscribe_topics(self.ads_b_json_topic, self._state_callback)
+            self.add_subscribe_topic(self.ads_b_json_topic, self._state_callback)
         if not self.ais_json_topic == "":
-            self.add_subscribe_topics(self.ais_json_topic, self._state_callback)
+            self.add_subscribe_topic(self.ais_json_topic, self._state_callback)
 
         # Enter the main loop
         while True:
