@@ -101,7 +101,6 @@ class ObjectLedgerPubSub(BaseMQTTPubSub):
             "object_id",
             "object_type",
             "timestamp",
-            "request_time",
             "latitude",
             "longitude",
             "altitude",
