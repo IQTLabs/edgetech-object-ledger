@@ -87,7 +87,13 @@ class ObjectLedgerPubSub(BaseMQTTPubSub):
         self.loop_interval = loop_interval
         self.log_level = log_level
         self.continue_on_exception = continue_on_exception
-
+        log_level_info = {'DEBUG': logging.DEBUG, 
+                            'INFO': logging.INFO,
+                            'WARNING': logging.WARNING,
+                            'ERROR': logging.ERROR,
+                            }
+        logger = logging.getLogger(__name__)
+        logger.setLevel(log_level_info.get(self.log_level, logging.INFO))
         # Connect MQTT client
         logging.info(
             f"Connecting MQTT client to broker at {self.mqtt_ip}:{self.mqtt_port}"
