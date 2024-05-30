@@ -232,6 +232,12 @@ class ObjectLedgerPubSub(BaseMQTTPubSub):
                 state["object_type"] = "ship"
                 state["track"] = state["course"]
 
+            elif "Radiosonde" in data:
+                logging.debug(f"Processing AIS state message data: {data}")
+                state = json.loads(data["Radiosonde"])
+                state["object_id"] = state["sonde_serial"]
+                state["object_type"] = "balloon"
+
             else:
                 logging.debug(f"Skipping state message data: {data}")
                 return
@@ -255,11 +261,13 @@ class ObjectLedgerPubSub(BaseMQTTPubSub):
                         )
 
                     else:
-                        logging.debug(
-                            f"Updating entry state data for object id: {entry.index}"
-                        )
-                        self.ledger.update(entry)
-
+                        if (entry['timestamp'] - self.ledger.loc[entry.index, 'timestamp']).iloc[0] > 0:
+                            self.ledger.update(entry)
+                            logging.debug(f"Updating entry state data for object id: {entry.index[0]} | {(entry['timestamp'] - self.ledger.loc[entry.index, 'timestamp']).iloc[0]} newer than ledger")
+                        #logging.info(
+                        #    f"Index: {entry.index[0]} | Time Delta (seconds): {(entry['timestamp'] - self.ledger.loc[entry.index, 'timestamp']).iloc[0]} | "
+                        #    f"New Time: {entry['timestamp'].iloc[0]} | Ledger Time: {self.ledger.loc[entry.index, 'timestamp'].iloc[0]}"
+                        #)
                 else:
                     logging.debug(f"Invalid entry: {entry}")
 
