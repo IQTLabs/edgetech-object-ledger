@@ -33,6 +33,7 @@ class ObjectLedgerPubSub(BaseMQTTPubSub):
         ledger_topic: str,
         max_aircraft_entry_age: float = 60.0,
         max_ship_entry_age: float = 180.0,
+        max_balloon_entry_age: float = 120.0,
         publish_interval: float = 1.0,
         heartbeat_interval: int = 10,
         loop_interval: float = 0.001,
@@ -58,6 +59,9 @@ class ObjectLedgerPubSub(BaseMQTTPubSub):
         max_ship_entry_age: float
             Maximum age of a ship entry in the ledger, after which it
             is dropped [s]
+        max_balloon_entry_age: float
+            Maximum age of aballoon entry in the ledger, after which it
+            is dropped [s]
         publish_interval: float
             Interval at which the ledger message is published [s]
         heartbeat_interval: int
@@ -82,6 +86,7 @@ class ObjectLedgerPubSub(BaseMQTTPubSub):
         self.ledger_topic = ledger_topic
         self.max_aircraft_entry_age = max_aircraft_entry_age
         self.max_ship_entry_age = max_ship_entry_age
+        self.max_balloon_entry_age = max_balloon_entry_age
         self.publish_interval = publish_interval
         self.heartbeat_interval = heartbeat_interval
         self.loop_interval = loop_interval
@@ -175,6 +180,7 @@ class ObjectLedgerPubSub(BaseMQTTPubSub):
         self.max_entry_age = {
             "aircraft": self.max_aircraft_entry_age,
             "ship": self.max_ship_entry_age,
+            "balloon": self.max_balloon_entry_age,
         }
 
     def _get_max_entry_age(self, object_type: str) -> float:
@@ -233,7 +239,7 @@ class ObjectLedgerPubSub(BaseMQTTPubSub):
                 state["track"] = state["course"]
 
             elif "Radiosonde" in data:
-                logging.debug(f"Processing AIS state message data: {data}")
+                logging.debug(f"Processing Radiosonde state message data: {data}")
                 state = json.loads(data["Radiosonde"])
                 state["object_id"] = state["sonde_serial"]
                 state["object_type"] = "balloon"
@@ -263,7 +269,7 @@ class ObjectLedgerPubSub(BaseMQTTPubSub):
                     else:
                         if (entry['timestamp'] - self.ledger.loc[entry.index, 'timestamp']).iloc[0] > 0:
                             self.ledger.update(entry)
-                            logging.debug(f"Updating entry state data for object id: {entry.index[0]} | {(entry['timestamp'] - self.ledger.loc[entry.index, 'timestamp']).iloc[0]} newer than ledger")
+                            logging.debug(f"Updating entry for {entry.index[0]} is {(entry['timestamp'] - self.ledger.loc[entry.index, 'timestamp']).iloc[0]} newer than ledger!")
                         #logging.info(
                         #    f"Index: {entry.index[0]} | Time Delta (seconds): {(entry['timestamp'] - self.ledger.loc[entry.index, 'timestamp']).iloc[0]} | "
                         #    f"New Time: {entry['timestamp'].iloc[0]} | Ledger Time: {self.ledger.loc[entry.index, 'timestamp'].iloc[0]}"
@@ -413,6 +419,7 @@ if __name__ == "__main__":
         ledger_topic=os.getenv("LEDGER_TOPIC", ""),
         max_aircraft_entry_age=float(os.getenv("MAX_AIRCRAFT_ENTRY_AGE", 60.0)),
         max_ship_entry_age=float(os.getenv("MAX_SHIP_ENTRY_AGE", 180.0)),
+        max_balloon_entry_age=float(os.getenv("MAX_BALLOON_ENTRY_AGE", 120.0)),
         publish_interval=float(os.getenv("PUBLISH_INTERVAL", 1.0)),
         heartbeat_interval=int(os.getenv("HEARTBEAT_INTERVAL", 10)),
         loop_interval=float(os.getenv("LOOP_INTERVAL", 0.001)),
