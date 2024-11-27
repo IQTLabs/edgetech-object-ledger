@@ -119,7 +119,8 @@ class ObjectLedgerPubSub(BaseMQTTPubSub):
             "horizontal_velocity",
             "vertical_velocity",
             "flight",
-            "squawk"
+            "squawk",
+            "on_ground"
         ]
         self.ledger = pd.DataFrame(columns=self.required_columns)
         self.ledger.set_index("object_id", inplace=True)
