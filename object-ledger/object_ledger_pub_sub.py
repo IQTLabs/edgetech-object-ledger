@@ -29,6 +29,7 @@ class ObjectLedgerPubSub(BaseMQTTPubSub):
         self,
         hostname: str,
         ads_b_json_topic: str,
+        ads_b_json_digest_topic: str,
         ais_json_topic: str,
         ledger_topic: str,
         max_aircraft_entry_age: float = 60.0,
@@ -82,6 +83,7 @@ class ObjectLedgerPubSub(BaseMQTTPubSub):
         super().__init__(**kwargs)
         self.hostname = hostname
         self.ads_b_json_topic = ads_b_json_topic
+        self.ads_b_json_digest_topic = ads_b_json_digest_topic
         self.ais_json_topic = ais_json_topic
         self.ledger_topic = ledger_topic
         self.max_aircraft_entry_age = max_aircraft_entry_age
@@ -135,6 +137,7 @@ class ObjectLedgerPubSub(BaseMQTTPubSub):
             f"""ObjectLedgerPubSub initialized with parameters:
     hostname = {hostname}
     ads_b_json_topic = {ads_b_json_topic}
+    ads_b_json_digest_topic = {ads_b_json_digest_topic}
     ais_json_topic = {ais_json_topic}
     ledger_topic = {ledger_topic}
     max_aircraft_entry_age = {max_aircraft_entry_age}
@@ -199,56 +202,19 @@ class ObjectLedgerPubSub(BaseMQTTPubSub):
         """
         return self.max_entry_age[object_type]
 
-    def _state_callback(
-        self,
-        _client: Union[mqtt.Client, None],
-        _userdata: Union[Dict[Any, Any], None],
-        msg: Union[mqtt.MQTTMessage, Dict[Any, Any]],
-    ) -> None:
-        """
-        Process state message.
+    def _update_state(self, state: Dict[Any, Any]) -> None:
+        """Update the ledger with a state message.
 
         Parameters
         ----------
-        _client: Union[mqtt.Client, None]
-            MQTT client
-        _userdata: Union[Dict[Any, Any], None]
-            Any required user data
-        msg: Union[mqtt.MQTTMessage, Dict[Any, Any]]
-            An MQTT message, or dictionary
+        state: Dict[Any, Any]
+            The state message
 
         Returns
         -------
         None
         """
         try:
-            logging.debug("Entered ledger output callback")
-
-            # Populate required state based on message type
-            data = self._decode_payload(msg)
-            if "ADS-B" in data:
-                logging.debug(f"Processing ADS-B state message data: {data}")
-                state = json.loads(data["ADS-B"])
-                state["object_id"] = state["icao_hex"]
-                state["object_type"] = "aircraft"
-
-            elif "Decoded AIS" in data:
-                logging.debug(f"Processing AIS state message data: {data}")
-                state = json.loads(data["Decoded AIS"])
-                state["object_id"] = state["mmsi"]
-                state["object_type"] = "ship"
-                state["track"] = state["course"]
-
-            elif "Radiosonde" in data:
-                logging.debug(f"Processing Radiosonde state message data: {data}")
-                state = json.loads(data["Radiosonde"])
-                state["object_id"] = state["sonde_serial"]
-                state["object_type"] = "balloon"
-
-            else:
-                logging.debug(f"Skipping state message data: {data}")
-                return
-
             # Pop keys that are not required columns
             [state.pop(key) for key in set(state.keys()) - set(self.required_columns)]
 
@@ -277,6 +243,75 @@ class ObjectLedgerPubSub(BaseMQTTPubSub):
                         #)
                 else:
                     logging.debug(f"Invalid entry: {entry}")
+
+        except Exception as exception:
+            # Set exception
+            self.exception = exception  # type: ignore
+    
+    
+
+    def _state_callback(
+        self,
+        _client: Union[mqtt.Client, None],
+        _userdata: Union[Dict[Any, Any], None],
+        msg: Union[mqtt.MQTTMessage, Dict[Any, Any]],
+    ) -> None:
+        """
+        Process state message.
+
+        Parameters
+        ----------
+        _client: Union[mqtt.Client, None]
+            MQTT client
+        _userdata: Union[Dict[Any, Any], None]
+            Any required user data
+        msg: Union[mqtt.MQTTMessage, Dict[Any, Any]]
+            An MQTT message, or dictionary
+
+        Returns
+        -------
+        None
+        """
+        try:
+            logging.debug("Entered ledger output callback")
+
+            # Populate required state based on message type
+            data = self._decode_payload(msg)
+
+
+            if "ADS-B Digest" in data:
+                logging.debug(f"Processing ADS-B state message data: {data}")
+                aircrafts = json.loads(data["ADS-B Digest"])
+                for state in aircrafts:
+                    state["object_id"] = state["icao_hex"]
+                    state["object_type"] = "aircraft"
+                    self._update_state(state)
+
+            if "ADS-B" in data:
+                logging.debug(f"Processing ADS-B state message data: {data}")
+                state = json.loads(data["ADS-B"])
+                state["object_id"] = state["icao_hex"]
+                state["object_type"] = "aircraft"
+                self._update_state(state)
+
+            elif "Decoded AIS" in data:
+                logging.debug(f"Processing AIS state message data: {data}")
+                state = json.loads(data["Decoded AIS"])
+                state["object_id"] = state["mmsi"]
+                state["object_type"] = "ship"
+                state["track"] = state["course"]
+                self._update_state(state)
+
+            elif "Radiosonde" in data:
+                logging.debug(f"Processing Radiosonde state message data: {data}")
+                state = json.loads(data["Radiosonde"])
+                state["object_id"] = state["sonde_serial"]
+                state["object_type"] = "balloon"
+                self._update_state(state)
+
+            else:
+                logging.debug(f"Skipping state message data: {data}")
+                return
 
         except Exception as exception:
             # Set exception
@@ -378,6 +413,8 @@ class ObjectLedgerPubSub(BaseMQTTPubSub):
         # Subscribe to required topics
         if not self.ads_b_json_topic == "":
             self.add_subscribe_topic(self.ads_b_json_topic, self._state_callback)
+        if not self.ads_b_json_digest_topic == "":
+            self.add_subscribe_topic(self.ads_b_json_digest_topic, self._state_callback)
         if not self.ais_json_topic == "":
             self.add_subscribe_topic(self.ais_json_topic, self._state_callback)
 
@@ -416,6 +453,7 @@ if __name__ == "__main__":
         mqtt_ip=os.getenv("MQTT_IP", "mqtt"),
         hostname=os.environ.get("HOSTNAME", ""),
         ads_b_json_topic=os.getenv("ADS_B_JSON_TOPIC", ""),
+        ads_b_json_digest_topic=os.getenv("ADS_B_JSON_DIGEST_TOPIC", ""),
         ais_json_topic=os.getenv("AIS_JSON_TOPIC", ""),
         ledger_topic=os.getenv("LEDGER_TOPIC", ""),
         max_aircraft_entry_age=float(os.getenv("MAX_AIRCRAFT_ENTRY_AGE", 60.0)),
