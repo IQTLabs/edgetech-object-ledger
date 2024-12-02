@@ -101,6 +101,13 @@ class ObjectLedgerPubSub(BaseMQTTPubSub):
                             }
         logger = logging.getLogger(__name__)
         logger.setLevel(log_level_info.get(self.log_level, logging.INFO))
+
+        if ads_b_json_digest_topic == "" and  ads_b_json_topic == "":
+            raise ValueError("Must specify the ads_b_json_digest_topic or ads_b_json_topic")
+    
+        if ads_b_json_digest_topic != "" and ads_b_json_topic != "":
+            raise ValueError("Must specify only one of the ads_b_json_digest_topic or ads_b_json_topic")
+        
         # Connect MQTT client
         logging.info(
             f"Connecting MQTT client to broker at {self.mqtt_ip}:{self.mqtt_port}"
@@ -411,10 +418,13 @@ class ObjectLedgerPubSub(BaseMQTTPubSub):
         schedule.every(self.publish_interval).seconds.do(self._publish_ledger)
 
         # Subscribe to required topics
-        if not self.ads_b_json_topic == "":
-            self.add_subscribe_topic(self.ads_b_json_topic, self._state_callback)
+
+        # prefer the digest topic if it is available
         if not self.ads_b_json_digest_topic == "":
             self.add_subscribe_topic(self.ads_b_json_digest_topic, self._state_callback)
+        elif not self.ads_b_json_topic == "":
+            self.add_subscribe_topic(self.ads_b_json_topic, self._state_callback)
+
         if not self.ais_json_topic == "":
             self.add_subscribe_topic(self.ais_json_topic, self._state_callback)
 
