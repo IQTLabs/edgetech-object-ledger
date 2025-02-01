@@ -244,6 +244,8 @@ class ObjectLedgerPubSub(BaseMQTTPubSub):
                         if (entry['timestamp'] - self.ledger.loc[entry.index, 'timestamp']).iloc[0] > 0:
                             self.ledger.update(entry)
                             logging.debug(f"Updating entry for {entry.index[0]} is {(entry['timestamp'] - self.ledger.loc[entry.index, 'timestamp']).iloc[0]} newer than ledger!")
+                        elif (entry['timestamp'] - self.ledger.loc[entry.index, 'timestamp']).iloc[0] < 0:
+                            logging.info(f"Skipping entry for {entry.index[0]} is {(entry['timestamp'] - self.ledger.loc[entry.index, 'timestamp']).iloc[0]} older than ledger!")
                         #logging.info(
                         #    f"Index: {entry.index[0]} | Time Delta (seconds): {(entry['timestamp'] - self.ledger.loc[entry.index, 'timestamp']).iloc[0]} | "
                         #    f"New Time: {entry['timestamp'].iloc[0]} | Ledger Time: {self.ledger.loc[entry.index, 'timestamp'].iloc[0]}"
@@ -351,7 +353,21 @@ class ObjectLedgerPubSub(BaseMQTTPubSub):
                     index,
                     inplace=True,
                 )
-
+        # Drop ledger entries if their age exceeds the maximum
+        # specified by type
+        index = self.ledger[
+            datetime.utcnow().timestamp() - self.ledger["timestamp"]
+            < 0
+        ].index
+        if not index.empty:
+            # Acquire, then release a lock on the callback thread to
+            # protect Pandas operations
+            with self.state_lock:
+                logging.info(f"Dropping entry for object ids because the are too new: {index}")
+                self.ledger.drop(
+                    index,
+                    inplace=True,
+                )
         # Send the full ledger to MQTT
         self._send_data(
             {
