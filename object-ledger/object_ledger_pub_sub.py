@@ -3,7 +3,7 @@ method for making ObjectLedger instances. Instatiates an ObjectLedger,
 and executes its main() method when run as a module.
 """
 import ast
-from datetime import datetime
+from datetime import datetime, timezone
 import json
 import logging
 import os
@@ -341,7 +341,7 @@ class ObjectLedgerPubSub(BaseMQTTPubSub):
         # Drop ledger entries if their age exceeds the maximum
         # specified by type
         index = self.ledger[
-            datetime.utcnow().timestamp() - self.ledger["timestamp"]
+            datetime.now(timezone.utc).timestamp() - self.ledger["timestamp"]
             > self.ledger["object_type"].apply(self._get_max_entry_age)
         ].index
         if not index.empty:
@@ -356,7 +356,7 @@ class ObjectLedgerPubSub(BaseMQTTPubSub):
         # Drop ledger entries if their age exceeds the maximum
         # specified by type
         index = self.ledger[
-            datetime.utcnow().timestamp() - self.ledger["timestamp"]
+            datetime.now(timezone.utc).timestamp() - self.ledger["timestamp"]
             < 0
         ].index
         if not index.empty:
@@ -393,7 +393,7 @@ class ObjectLedgerPubSub(BaseMQTTPubSub):
         """
         # TODO: Provide fields via environment, or command line
         out_json = self.generate_payload_json(
-            push_timestamp=int(datetime.utcnow().timestamp()),
+            push_timestamp=int(datetime.now(timezone.utc).timestamp()),
             device_type="TBC",
             id_=self.hostname,
             deployment_id=f"TBC-{self.hostname}",
