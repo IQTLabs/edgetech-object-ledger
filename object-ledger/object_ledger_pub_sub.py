@@ -245,7 +245,7 @@ class ObjectLedgerPubSub(BaseMQTTPubSub):
                         if (entry['timestamp'] - self.ledger.loc[entry.index, 'timestamp']).iloc[0] > 0:
                             self.ledger.update(entry)
                             logging.debug(f"Updating entry for {entry.index[0]} is {(entry['timestamp'] - self.ledger.loc[entry.index, 'timestamp']).iloc[0]} newer than ledger!")
-                        elif (entry['timestamp'] - self.ledger.loc[entry.index, 'timestamp']).iloc[0] < 0:
+                        elif (entry['timestamp'] - self.ledger.loc[entry.index, 'timestamp']).iloc[0] < -0.2:
                             logging.info(f"Skipping entry for {entry.index[0]} is {(entry['timestamp'] - self.ledger.loc[entry.index, 'timestamp']).iloc[0]} older than ledger! It is {datetime.now(timezone.utc).timestamp() - entry['timestamp'].iloc[0]} sec olds Update: {entry['timestamp'].iloc[0]} | Ledger: {self.ledger.loc[entry.index, 'timestamp'].iloc[0]}")
                         #logging.info(
                         #    f"Index: {entry.index[0]} | Time Delta (seconds): {(entry['timestamp'] - self.ledger.loc[entry.index, 'timestamp']).iloc[0]} | "
