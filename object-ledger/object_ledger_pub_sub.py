@@ -130,7 +130,8 @@ class ObjectLedgerPubSub(BaseMQTTPubSub):
             "flight",
             "squawk",
             "on_ground",
-            "category"
+            "category",
+            "emergency",
         ]
 
         self.ledger = pd.DataFrame(columns=self.required_columns)
